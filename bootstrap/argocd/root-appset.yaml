@@ -13,7 +13,7 @@ spec:
   goTemplate: true
   generators:
     - git:
-        repoURL: https://github.com/arozhdan/environment.git
+        repoURL: https://github.com/Arozhdan/environment.git
         revision: main
         directories:
           - path: infra/*
@@ -28,7 +28,7 @@ spec:
     spec:
       project: default
       source:
-        repoURL: https://github.com/arozhdan/environment.git
+        repoURL: https://github.com/Arozhdan/environment.git
         targetRevision: main
         path: '{{ .path }}'
       destination:
@@ -50,7 +50,7 @@ spec:
   goTemplate: true
   generators:
     - git:
-        repoURL: https://github.com/arozhdan/environment.git
+        repoURL: https://github.com/Arozhdan/environment.git
         revision: main
         directories:
           - path: secrets/*
@@ -65,7 +65,7 @@ spec:
     spec:
       project: default
       source:
-        repoURL: https://github.com/arozhdan/environment.git
+        repoURL: https://github.com/Arozhdan/environment.git
         targetRevision: main
         path: '{{ .path }}'
       destination:
@@ -87,7 +87,7 @@ spec:
   goTemplate: true
   generators:
     - git:
-        repoURL: https://github.com/arozhdan/environment.git
+        repoURL: https://github.com/Arozhdan/environment.git
         revision: main
         directories:
           - path: apps/*
@@ -102,7 +102,7 @@ spec:
     spec:
       project: default
       source:
-        repoURL: https://github.com/arozhdan/environment.git
+        repoURL: https://github.com/Arozhdan/environment.git
         targetRevision: main
         path: '{{ .path }}'
       destination:
