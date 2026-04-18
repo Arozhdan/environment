@@ -10,7 +10,7 @@ spec:
   goTemplate: true
   generators:
     - git:
-        repoURL: https://github.com/CHANGE_ME/environment.git
+        repoURL: https://github.com/arozhdan/environment.git
         revision: main
         directories:
           - path: apps/*
@@ -25,7 +25,7 @@ spec:
     spec:
       project: default
       source:
-        repoURL: https://github.com/CHANGE_ME/environment.git
+        repoURL: https://github.com/arozhdan/environment.git
         targetRevision: main
         path: '{{ .path }}'
       destination:

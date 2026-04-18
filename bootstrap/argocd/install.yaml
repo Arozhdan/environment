@@ -23,7 +23,7 @@ spec:
       helm:
         valueFiles:
           - $values/bootstrap/argocd/values.yaml
-    - repoURL: https://github.com/CHANGE_ME/environment.git
+    - repoURL: https://github.com/arozhdan/environment.git
       targetRevision: main
       ref: values
   destination:
