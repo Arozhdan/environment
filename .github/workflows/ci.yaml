@@ -1,0 +1,59 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kubeconform
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz
+          sudo mv kubeconform /usr/local/bin/
+
+      - name: Install Helm (for kustomize --enable-helm)
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+
+      - name: Install kustomize
+        run: |
+          curl -sSL "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+
+      - name: SOPS secrets layout check
+        run: bash scripts/check-sops.sh
+
+      - name: Kustomize + kubeconform
+        env:
+          KUSTOMIZE_BIN: kustomize
+          KUBERNETES_VERSION: "1.31.0"
+        run: bash scripts/validate.sh
+
+      - name: Helm lint (bootstrap Argo CD values)
+        run: |
+          helm repo add argo https://argoproj.github.io/argo-helm
+          helm repo update
+          helm pull argo/argo-cd --version 7.7.22 --untar
+          helm lint argo-cd -f bootstrap/argocd/values.yaml
+
+  yamllint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ibiqlik/action-yamllint@v3
+        with:
+          config_data: |
+            extends: default
+            rules:
+              line-length: disable
+              truthy: disable

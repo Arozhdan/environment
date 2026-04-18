@@ -1,0 +1,11 @@
+# Replace TUNNEL_ID and hostnames with your Cloudflare Tunnel + DNS names.
+# Traffic: Internet → Cloudflare edge → cloudflared → ingress-nginx → Ingress objects.
+tunnel: REPLACE_TUNNEL_ID
+credentials-file: /etc/cloudflared/creds/credentials.json
+metrics: 0.0.0.0:2000
+ingress:
+  - hostname: hello.example.com
+    service: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
+  - hostname: grafana.example.com
+    service: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
+  - service: http_status:404

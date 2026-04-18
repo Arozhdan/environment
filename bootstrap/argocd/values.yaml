@@ -1,0 +1,103 @@
+# Pinned chart version lives in bootstrap/argocd/install.yaml (targetRevision).
+# Replace notification URLs / SSO in a follow-up PR after bootstrap.
+
+global:
+  logging:
+    level: info
+
+configs:
+  params:
+    # Set true only if TLS terminates before Argo CD (e.g. reverse proxy only).
+    server.insecure: false
+  cm:
+    # Required for Kustomize with helmCharts: in each infra/*/ overlay.
+    kustomize.buildOptions: "--load-restrictor LoadRestrictionsNone --enable-helm"
+    # Optional: public URL if you expose the UI (Tailscale DNS, internal LB, etc.)
+    url: https://argocd.example.invalid
+  rbac:
+    policy.csv: |
+      # GitHub-style teams — replace with your IdP groups when you add SSO.
+      p, role:org-admin, applications, *, */*, allow
+      p, role:org-admin, clusters, get, *, allow
+      p, role:org-admin, repositories, *, *, allow
+      p, role:org-admin, logs, get, */*, allow
+      p, role:readonly, applications, get, */*, allow
+      p, role:readonly, logs, get, */*, allow
+      g, argocd-admins, role:org-admin
+      g, argocd-readonly, role:readonly
+  cmp:
+    create: false
+
+notifications:
+  enabled: true
+  argocdUrl: https://argocd.example.invalid
+  # Add Slack / email / webhook entries per:
+  # https://argo-cd.readthedocs.io/en/stable/operator-manual/notifications/services/overview/
+  notifiers: {}
+  secret:
+    create: true
+    name: argocd-notifications-secret
+    items: {}
+  cm:
+    create: true
+    # Populate templates + triggers when notifiers are configured (see docs/hardening.md).
+    templates: {}
+    triggers: {}
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+controller:
+  replicas: 1
+  resources:
+    limits:
+      cpu: "1"
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+
+dex:
+  enabled: false
+
+redis:
+  enabled: true
+
+server:
+  replicas: 1
+  resources:
+    limits:
+      cpu: "1"
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+  ingress:
+    enabled: false
+
+repoServer:
+  replicas: 1
+  resources:
+    limits:
+      cpu: "1"
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+  env:
+    - name: HELM_CACHE_HOME
+      value: /helm-working-dir
+  volumeMounts:
+    - mountPath: /helm-working-dir
+      name: helm-working-dir
+  volumes:
+    - name: helm-working-dir
+      emptyDir: {}
+
+applicationSet:
+  enabled: true
+  replicas: 1

@@ -1,0 +1,7 @@
+# SOPS configuration — replace the age recipient with your public key.
+# Generate a keypair: age-keygen -o age.key
+# Then: age-keygen -y age.key  → paste below
+creation_rules:
+  - path_regex: \.enc\.ya?ml$
+    age: >-
+      age1REPLACE_WITH_YOUR_AGE_PUBLIC_KEY

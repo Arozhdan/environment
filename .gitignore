@@ -1,0 +1,26 @@
+# OS
+.DS_Store
+
+# Secrets & keys (never commit plaintext)
+*.age
+age.key
+*.pem
+!**/testdata/**/*.pem
+
+# Local env
+.env
+.env.*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build / temp
+tmp/
+*.tmp
+rendered/
+
+# SOPS: allow only encrypted files in git; pre-commit blocks mistakes
+# (do not add patterns that ignore encrypted YAML)

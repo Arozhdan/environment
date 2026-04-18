@@ -1,0 +1,18 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "labels": ["dependencies"],
+  "prHourlyLimit": 4,
+  "packageRules": [
+    {
+      "description": "Require human review for Argo CD chart bumps",
+      "matchPackageNames": ["argo-cd"],
+      "matchDatasources": ["helm"],
+      "automerge": false
+    }
+  ]
+}

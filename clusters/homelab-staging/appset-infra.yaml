@@ -1,0 +1,39 @@
+# ApplicationSet: one Argo CD Application per directory under infra/* (Kustomize + Helm).
+# Replace repoURL with the exact repository URL registered in Argo CD (HTTPS or SSH).
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: homelab-staging-infra
+  namespace: argocd
+spec:
+  goTemplate: true
+  generators:
+    - git:
+        repoURL: https://github.com/CHANGE_ME/environment.git
+        revision: main
+        directories:
+          - path: infra/*
+  template:
+    metadata:
+      name: 'infra-{{ .path.basename }}'
+      namespace: argocd
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+      annotations:
+        argocd.argoproj.io/sync-wave: '{{ default "50" (regexFind "^[0-9]+" .path.basename) }}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/CHANGE_ME/environment.git
+        targetRevision: main
+        path: '{{ .path }}'
+      destination:
+        server: https://kubernetes.default.svc
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
