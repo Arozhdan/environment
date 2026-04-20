@@ -1,0 +1,26 @@
+# Root Application — watches clusters/homelab-staging/ and keeps all ApplicationSets
+# in sync with Git. Apply once during bootstrap:
+#   kubectl apply -f bootstrap/argocd/root-app.yaml
+# After this, all changes to clusters/homelab-staging/*.yaml are GitOps-managed.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: homelab-staging-root
+  namespace: argocd
+  # No finalizer here — deleting this app should NOT cascade-delete all the AppSets.
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Arozhdan/environment.git
+    targetRevision: main
+    path: clusters/homelab-staging
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
