@@ -12,6 +12,7 @@ grafana:
     ingressClassName: nginx
     annotations:
       cert-manager.io/cluster-issuer: letsencrypt-staging
+      nginx.ingress.kubernetes.io/ssl-redirect: "false"
     hosts:
       - grafana.tweak.codes
     tls:
