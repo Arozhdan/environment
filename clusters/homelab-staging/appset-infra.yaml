@@ -37,3 +37,9 @@ spec:
         syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true
+      ignoreDifferences:
+        - group: apps
+          kind: StatefulSet
+          jsonPointers:
+            - /spec/volumeClaimTemplates
+            - /spec/template/spec/containers/0/resources
