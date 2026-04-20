@@ -3,9 +3,6 @@ kind: Kustomization
 
 namespace: observability
 
-resources:
-  - namespace.yaml
-
 helmCharts:
   - name: alloy
     repo: https://grafana.github.io/helm-charts
