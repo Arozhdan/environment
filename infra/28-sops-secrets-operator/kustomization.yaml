@@ -13,3 +13,4 @@ helmCharts:
     releaseName: sops-secrets-operator
     namespace: sops-system
     valuesFile: values.yaml
+    includeCRDs: true
