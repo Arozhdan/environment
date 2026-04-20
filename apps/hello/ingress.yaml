@@ -1,4 +1,3 @@
-# Replace hello.example.com with your DNS name (and match Cloudflare Tunnel hostname).
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -11,10 +10,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - hello.example.com
+        - hello.tweak.codes
       secretName: hello-tls
   rules:
-    - host: hello.example.com
+    - host: hello.tweak.codes
       http:
         paths:
           - path: /

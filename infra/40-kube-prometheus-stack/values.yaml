@@ -13,11 +13,11 @@ grafana:
     annotations:
       cert-manager.io/cluster-issuer: letsencrypt-staging
     hosts:
-      - grafana.example.com
+      - grafana.tweak.codes
     tls:
       - secretName: grafana-tls
         hosts:
-          - grafana.example.com
+          - grafana.tweak.codes
   additionalDataSources:
     - name: Loki
       type: loki
