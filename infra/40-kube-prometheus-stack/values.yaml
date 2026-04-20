@@ -7,6 +7,9 @@ alertmanager:
 
 grafana:
   adminPassword: changeme-grafana-admin
+  grafana.ini:
+    server:
+      root_url: https://grafana.tweak.codes
   ingress:
     enabled: true
     ingressClassName: nginx
