@@ -31,5 +31,33 @@ singleBinary:
       cpu: 100m
       memory: 256Mi
 
+# Chart ships SimpleScalable defaults (read/write/backend replicas > 0) alongside
+# the SingleBinary option. Its validate.yaml refuses if both have replicas, so we
+# have to zero out every non-SingleBinary component explicitly.
+backend:
+  replicas: 0
+read:
+  replicas: 0
+write:
+  replicas: 0
+ingester:
+  replicas: 0
+querier:
+  replicas: 0
+queryFrontend:
+  replicas: 0
+queryScheduler:
+  replicas: 0
+distributor:
+  replicas: 0
+compactor:
+  replicas: 0
+indexGateway:
+  replicas: 0
+bloomCompactor:
+  replicas: 0
+bloomGateway:
+  replicas: 0
+
 gateway:
   enabled: false

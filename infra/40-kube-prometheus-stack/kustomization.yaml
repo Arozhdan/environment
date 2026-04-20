@@ -13,3 +13,6 @@ helmCharts:
     releaseName: kube-prometheus-stack
     namespace: monitoring
     valuesFile: values.yaml
+    # prometheus-operator CRDs live in the `crds` subchart's crds/ dir,
+    # so helm template needs --include-crds to emit them.
+    includeCRDs: true
