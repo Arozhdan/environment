@@ -6,7 +6,7 @@ alertmanager:
   enabled: true
 
 grafana:
-  adminPassword: changeme-grafana-admin
+  adminPassword: changeme-grafana-admin  # TODO: replace and encrypt with SOPS
   grafana.ini:
     server:
       root_url: https://grafana.tweak.codes
@@ -14,7 +14,7 @@ grafana:
     enabled: true
     ingressClassName: nginx
     annotations:
-      cert-manager.io/cluster-issuer: letsencrypt-staging
+      cert-manager.io/cluster-issuer: letsencrypt-prod
       nginx.ingress.kubernetes.io/ssl-redirect: "false"
     hosts:
       - grafana.tweak.codes
