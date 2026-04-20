@@ -40,6 +40,11 @@ spec:
         syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true
+      ignoreDifferences:
+        - group: apps
+          kind: StatefulSet
+          jqPathExpressions:
+            - .spec.volumeClaimTemplates[]?.spec.volumeMode
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
