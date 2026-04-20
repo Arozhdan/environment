@@ -1,6 +1,6 @@
 # Replace TUNNEL_ID and hostnames with your Cloudflare Tunnel + DNS names.
 # Traffic: Internet → Cloudflare edge → cloudflared → ingress-nginx → Ingress objects.
-tunnel: 63b08bb5-8d1b-4232-aea3-1bf198fe581b
+tunnel: 848438d3-8394-4366-85c0-8056bec0f99d
 credentials-file: /etc/cloudflared/creds/credentials.json
 metrics: 0.0.0.0:2000
 ingress:
