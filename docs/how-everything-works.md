@@ -38,11 +38,11 @@ load balancer (ServiceLB) that assigns real IPs to services on your network.
 We had to make two changes to the default k3s installation:
 
 - **Disabled Traefik** — k3s ships with Traefik (an ingress controller) by default.
-  We use ingress-nginx instead. Two ingress controllers can't both hold ports 80 and
-  443 on the same host, so Traefik had to go. This is done via a flag in the k3s
-  systemd service file.
+We use ingress-nginx instead. Two ingress controllers can't both hold ports 80 and
+443 on the same host, so Traefik had to go. This is done via a flag in the k3s
+systemd service file.
 - **Increased inotify limits** — k3s and all its pods open a lot of file watchers.
-  Without higher limits, the system runs out and k3s fails to restart.
+Without higher limits, the system runs out and k3s fails to restart.
 
 ---
 
@@ -60,7 +60,7 @@ cluster, Argo reverts it.
 - History lives in git log
 - Recovery from total cluster loss is mostly automatic
 
-The Argo CD UI is at **https://argocd.tweak.codes**. Username is `admin`. The
+The Argo CD UI is at **[https://argocd.tweak.codes](https://argocd.tweak.codes)**. Username is `admin`. The
 password is retrieved with:
 
 ```bash
@@ -169,11 +169,11 @@ environment.git/
 **Important distinction between `bootstrap/` and `clusters/`:**
 
 - `bootstrap/` — files you apply manually **once** when setting up a new cluster.
-  After that they are reference only. You only touch them again to change how Argo CD
-  itself is configured (like adding an ingress for the UI).
+After that they are reference only. You only touch them again to change how Argo CD
+itself is configured (like adding an ingress for the UI).
 - `clusters/homelab-staging/` — the ongoing GitOps source of truth for your cluster
-  configuration. Changes here are applied automatically by the `homelab-staging-root`
-  Argo CD Application.
+configuration. Changes here are applied automatically by the `homelab-staging-root`
+Argo CD Application.
 
 ---
 
@@ -181,19 +181,22 @@ environment.git/
 
 You have three ApplicationSets, each scanning a different folder pattern:
 
-**`appset-infra.yaml`** — watches `infra/*`
+`**appset-infra.yaml`** — watches `infra/*`
+
 ```
 infra/10-cert-manager/  → Argo CD app "infra-10-cert-manager"
 infra/20-ingress-nginx/ → Argo CD app "infra-20-ingress-nginx"
 ... and so on for each infra/* folder
 ```
 
-**`appset-apps.yaml`** — watches `apps/*`
+`**appset-apps.yaml**` — watches `apps/*`
+
 ```
 apps/hello/ → Argo CD app "app-hello"
 ```
 
-**`appset-secrets.yaml`** — watches `secrets/*`
+`**appset-secrets.yaml**` — watches `secrets/*`
+
 ```
 secrets/cloudflared/ → Argo CD app "secret-cloudflared"
 ```
@@ -299,8 +302,7 @@ app. Just create an `Ingress` resource in your app and it works automatically.
 **About the host vs cluster cloudflared:** When we started, there was also a cloudflared
 process running as a systemd service on the host machine (the homelab OS itself, not
 inside Kubernetes). It had been installed manually before this GitOps setup. We
-migrated everything to the cluster pod and disabled the host service (`systemctl
-disable --now cloudflared`). The cluster pod is now the only cloudflared.
+migrated everything to the cluster pod and disabled the host service (`systemctl disable --now cloudflared`). The cluster pod is now the only cloudflared.
 
 **Restarting after config changes:** cloudflared reads its config once at startup and
 never re-reads it. When Argo CD updates the ConfigMap (which backs `config.yaml`), the
@@ -320,7 +322,7 @@ changes while running.
 **What it installs:**
 
 - **Prometheus** — collects and stores metrics (numbers over time: CPU, memory,
-  request counts, etc.)
+request counts, etc.)
 - **Grafana** — dashboard UI at `https://grafana.tweak.codes`
 - **Alertmanager** — sends alerts when something goes wrong
 - **kube-state-metrics** — Kubernetes-level metrics (pod counts, health status, etc.)
@@ -361,6 +363,7 @@ A demo nginx container that proves the entire stack works end-to-end. Accessible
 `https://hello.tweak.codes`.
 
 Files:
+
 - `deployment.yaml` — one nginx pod
 - `service.yaml` — exposes the pod inside the cluster on port 80
 - `ingress.yaml` — tells ingress-nginx to route `hello.tweak.codes` to the service
@@ -491,7 +494,8 @@ When someone visits `https://hello.tweak.codes`:
 
 1. Create `apps/my-app/` with these files:
 
-**`kustomization.yaml`**
+`**kustomization.yaml**`
+
 ```yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -503,7 +507,8 @@ resources:
   - ingress.yaml
 ```
 
-**`namespace.yaml`**
+`**namespace.yaml**`
+
 ```yaml
 apiVersion: v1
 kind: Namespace
@@ -511,7 +516,8 @@ metadata:
   name: my-app
 ```
 
-**`deployment.yaml`**
+`**deployment.yaml**`
+
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -535,7 +541,8 @@ spec:
             - containerPort: 3000
 ```
 
-**`service.yaml`**
+`**service.yaml**`
+
 ```yaml
 apiVersion: v1
 kind: Service
@@ -550,7 +557,8 @@ spec:
       targetPort: 3000
 ```
 
-**`ingress.yaml`**
+`**ingress.yaml**`
+
 ```yaml
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -578,7 +586,7 @@ spec:
                   number: 80
 ```
 
-2. Commit and push:
+1. Commit and push:
 
 ```bash
 git add apps/my-app/
@@ -598,7 +606,8 @@ Argo CD picks up the new folder within a few minutes and deploys everything.
 
 Use `infra/` instead of `apps/`. Create `infra/NN-my-app/`:
 
-**`kustomization.yaml`**
+`**kustomization.yaml**`
+
 ```yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -612,7 +621,7 @@ helmCharts:
     includeCRDs: true   # always add this — costs nothing if the chart has no CRDs
 ```
 
-**`values.yaml`** — your chart configuration.
+`**values.yaml**` — your chart configuration.
 
 ---
 
@@ -634,7 +643,7 @@ spec:
         API_KEY: "my-actual-api-key"
 ```
 
-2. Encrypt it:
+1. Encrypt it:
 
 ```bash
 SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt \
@@ -643,7 +652,7 @@ sops --encrypt \
   /tmp/my-app-secret.yaml > secrets/my-app/my-app-secret.enc.yaml
 ```
 
-3. Create `secrets/my-app/kustomization.yaml`:
+1. Create `secrets/my-app/kustomization.yaml`:
 
 ```yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
@@ -652,7 +661,7 @@ resources:
   - my-app-secret.enc.yaml
 ```
 
-4. Reference the secret in your Deployment:
+1. Reference the secret in your Deployment:
 
 ```yaml
 env:
@@ -663,7 +672,7 @@ env:
         key: API_KEY
 ```
 
-5. Commit and push. The sops-secrets-operator decrypts it and creates the k8s Secret.
+1. Commit and push. The sops-secrets-operator decrypts it and creates the k8s Secret.
 
 ---
 
