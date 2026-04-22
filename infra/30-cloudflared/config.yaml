@@ -1,13 +1,10 @@
-# Replace TUNNEL_ID and hostnames with your Cloudflare Tunnel + DNS names.
 # Traffic: Internet → Cloudflare edge → cloudflared → ingress-nginx → Ingress objects.
+# Wildcard rule: any subdomain of tweak.codes goes to ingress-nginx.
+# To expose a new app, just add an Ingress resource — no changes needed here.
 tunnel: 848438d3-8394-4366-85c0-8056bec0f99d
 credentials-file: /etc/cloudflared/creds/credentials.json
 metrics: 0.0.0.0:2000
 ingress:
-  - hostname: hello.tweak.codes
-    service: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
-  - hostname: grafana.tweak.codes
-    service: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
-  - hostname: argocd.tweak.codes
+  - hostname: "*.tweak.codes"
     service: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
   - service: http_status:404
