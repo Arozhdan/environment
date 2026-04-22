@@ -2,7 +2,8 @@
 
 This document explains everything we set up, why we set it up, how it all connects,
 and what to do when you want to add something new. Written for someone who is not a
-DevOps specialist.
+DevOps specialist but wants to actually understand what is going on — not just copy
+commands.
 
 ---
 
@@ -16,10 +17,10 @@ them to the network.
 
 The problem with Kubernetes is that it is configured through hundreds of YAML files.
 You could apply those files manually with `kubectl apply`, but then if the cluster
-dies you have to remember everything. Instead, we use **GitOps**: the Git repository
-IS the cluster. Every YAML file that should exist in the cluster lives in Git. A tool
-called **Argo CD** runs inside the cluster, watches the Git repository, and makes the
-cluster match whatever is in Git automatically.
+dies you have to remember everything you did. Instead, we use **GitOps**: the Git
+repository IS the cluster. Every YAML file that should exist in the cluster lives in
+Git. A tool called **Argo CD** runs inside the cluster, watches the Git repository,
+and makes the cluster match whatever is in Git automatically.
 
 The result: if the cluster dies, you reinstall k3s, run two `kubectl apply` commands,
 and within minutes the cluster rebuilds itself from Git — every app, every setting,
@@ -31,55 +32,98 @@ every certificate, every secret.
 
 ### k3s — the cluster itself
 
-k3s is Kubernetes but stripped down for single-node homelabs. It ships with:
+k3s is Kubernetes but stripped down for single-node homelabs. It ships with a built-in
+load balancer (ServiceLB) that assigns real IPs to services on your network.
 
-- A built-in load balancer (ServiceLB, which assigns IPs to services)
-- A built-in storage driver
-- No Traefik by default (we removed it because we use ingress-nginx instead)
+We had to make two changes to the default k3s installation:
 
-**Why k3s and not full Kubernetes?** Because running a full 3-node Kubernetes cluster
-at home is overkill and expensive. k3s does 95% of the same things.
+- **Disabled Traefik** — k3s ships with Traefik (an ingress controller) by default.
+  We use ingress-nginx instead. Two ingress controllers can't both hold ports 80 and
+  443 on the same host, so Traefik had to go. This is done via a flag in the k3s
+  systemd service file.
+- **Increased inotify limits** — k3s and all its pods open a lot of file watchers.
+  Without higher limits, the system runs out and k3s fails to restart.
+
+---
 
 ### Argo CD — the GitOps engine
 
-Argo CD runs inside the cluster. Every 3 minutes (or immediately when you push to Git)
-it compares what Git says should exist with what actually exists in the cluster. If
-they differ, it applies the Git version. If something was changed manually in the
+Argo CD runs inside the cluster. Every few minutes (or immediately when you push to
+Git) it compares what Git says should exist with what actually exists in the cluster.
+If they differ, it applies the Git version. If something was changed manually in the
 cluster, Argo reverts it.
 
-**Why is this useful?** Because "the cluster should look like Git" means:
+**Why is this useful?**
 
-- You can see the entire cluster state by reading files
-- Changes are reviewed in pull requests
-- History is in git log
-- Recovery is automatic
+- You can see the entire cluster state by reading files in Git
+- Changes are reviewed before being applied (pull requests)
+- History lives in git log
+- Recovery from total cluster loss is mostly automatic
 
-### Kustomize and Helm — the YAML assemblers
+The Argo CD UI is at **https://argocd.tweak.codes**. Username is `admin`. The
+password is retrieved with:
 
-Kubernetes resources are YAML files. Writing raw YAML for every app gets repetitive.
+```bash
+kubectl -n argocd get secret argocd-initial-admin-secret \
+  -o jsonpath='{.data.password}' | base64 -d
+```
 
-**Helm** is a package manager for Kubernetes. Community-maintained "charts" exist for
-almost every tool (nginx, Prometheus, Loki, etc.). A chart is a template that you
-configure with a `values.yaml` file. Instead of writing 3000 lines of Prometheus YAML
-yourself, you write 30 lines of values and Helm generates the rest.
+---
 
-**Kustomize** is a tool that assembles YAML from multiple sources. In this repo, each
-`infra/*/kustomization.yaml` file tells Kustomize: "take this Helm chart, use these
-values, and also include these extra YAML files". Argo CD runs Kustomize (with Helm)
-to generate the final YAML that gets applied to the cluster.
+### Helm — Kubernetes package manager
 
-Technical flow:
+Helm is the package manager for Kubernetes. Community-maintained "charts" exist for
+almost every tool (nginx, Prometheus, Loki, etc.). A chart is a collection of
+templates that you configure with a `values.yaml` file. Instead of writing 3000 lines
+of Prometheus YAML yourself, you write 30 lines of values and Helm generates the rest.
+
+Helm knows nothing about your cluster or Git. It just takes a chart plus values and
+produces Kubernetes YAML. That's its entire job.
+
+---
+
+### Kustomize — the adapter between Argo CD and external Helm charts
+
+This one confuses people because it seems to overlap with Helm. Here is the honest
+explanation.
+
+**Argo CD can use Helm natively.** If you have a folder with a `Chart.yaml` in it,
+Argo CD detects it and runs Helm automatically. No Kustomize needed for that.
+
+**The problem comes from ApplicationSets.** We use ApplicationSets to auto-discover
+apps — Argo CD scans `infra/*/` in your Git repo and creates one Application per
+folder. But the charts for Loki, Grafana, ingress-nginx etc. are NOT in your Git repo.
+They live on external Helm repositories (`https://grafana.github.io/helm-charts` etc.).
+
+An ApplicationSet generator can only create Applications that point at your Git repo
+folders. It cannot say "this folder should come from a different Helm repo URL". That
+is the gap.
+
+Kustomize fills that gap. Each `infra/*/kustomization.yaml` lives in your Git folder
+(which the ApplicationSet can find) and says "go fetch this chart from this external
+Helm repo and render it with these values". Argo CD runs Kustomize, Kustomize fetches
+the external chart, and the combined output is applied to the cluster.
 
 ```
-Git: infra/20-ingress-nginx/kustomization.yaml
-         + values.yaml
-         + namespace.yaml
-         ↓
-Argo CD runs: kustomize build --enable-helm
-         ↓
-Generated: ~500 lines of nginx Deployment, Service, RBAC, etc.
-         ↓
-Applied to cluster via kubectl
+ApplicationSet scans infra/45-loki/ in your Git repo
+  → finds kustomization.yaml (in Git)
+  → kustomization.yaml says: fetch loki chart from grafana's helm repo
+  → Kustomize downloads it, runs helm template, returns plain Kubernetes YAML
+  → Argo CD applies that YAML to the cluster
+```
+
+**For your own apps with plain YAML files already in the repo** — Kustomize just
+passes them through unchanged. The `kustomization.yaml` is just a list of which files
+to include. It adds zero complexity.
+
+```yaml
+# apps/my-app/kustomization.yaml — for plain YAML apps
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
 ```
 
 ---
@@ -88,19 +132,19 @@ Applied to cluster via kubectl
 
 ```
 environment.git/
-├── bootstrap/          # One-time setup files (applied manually once)
+├── bootstrap/          # One-time setup files — apply manually once when building cluster
 │   └── argocd/
-│       ├── install.yaml      # Tells Argo CD to manage itself from Git
-│       ├── root-app.yaml     # Tells Argo CD to watch clusters/homelab-staging/
-│       ├── root-appset.yaml  # Convenience copy of the ApplicationSets (bootstrap only)
-│       └── values.yaml       # Argo CD Helm chart configuration
+│       ├── install.yaml      # Installs Argo CD itself into the cluster
+│       ├── root-app.yaml     # Tells Argo CD to watch clusters/homelab-staging/ in Git
+│       ├── root-appset.yaml  # Old bootstrap file — superseded by root-app.yaml
+│       └── values.yaml       # Argo CD configuration (ingress, insecure mode, etc.)
 │
 ├── clusters/
-│   └── homelab-staging/      # The authoritative config for your cluster
+│   └── homelab-staging/      # The authoritative ApplicationSet definitions
 │       ├── kustomization.yaml
-│       ├── appset-infra.yaml    # "watch infra/* in Git"
-│       ├── appset-secrets.yaml  # "watch secrets/* in Git"
-│       └── appset-apps.yaml     # "watch apps/* in Git"
+│       ├── appset-infra.yaml    # "create one Argo app per infra/* folder"
+│       ├── appset-secrets.yaml  # "create one Argo app per secrets/* folder"
+│       └── appset-apps.yaml     # "create one Argo app per apps/* folder"
 │
 ├── infra/              # Platform services (numbered for install order)
 │   ├── 10-cert-manager/
@@ -114,53 +158,52 @@ environment.git/
 ├── apps/               # Your actual applications
 │   └── hello/
 │
-├── secrets/            # Encrypted secrets only (never plaintext)
+├── secrets/            # SOPS-encrypted secrets only (never plaintext here)
 │   └── cloudflared/
 │
 ├── docs/               # Documentation
-├── .sops.yaml          # Encryption configuration
-└── renovate.json       # Automated dependency update config
+├── .sops.yaml          # Tells SOPS which public key to use when encrypting
+└── renovate.json       # Automated dependency update bot config
 ```
+
+**Important distinction between `bootstrap/` and `clusters/`:**
+
+- `bootstrap/` — files you apply manually **once** when setting up a new cluster.
+  After that they are reference only. You only touch them again to change how Argo CD
+  itself is configured (like adding an ingress for the UI).
+- `clusters/homelab-staging/` — the ongoing GitOps source of truth for your cluster
+  configuration. Changes here are applied automatically by the `homelab-staging-root`
+  Argo CD Application.
 
 ---
 
 ## How Argo CD Discovers Everything (ApplicationSets)
 
-The key to how everything is wired together is **ApplicationSets**. An ApplicationSet
-is an Argo CD resource that says: "for every directory matching this pattern in Git,
-create one Argo CD Application".
+You have three ApplicationSets, each scanning a different folder pattern:
 
-You have three ApplicationSets:
-
-`**appset-infra.yaml`** — watches `infra/`*
-
+**`appset-infra.yaml`** — watches `infra/*`
 ```
-infra/10-cert-manager/   → creates Argo CD app "infra-10-cert-manager"
-infra/20-ingress-nginx/  → creates Argo CD app "infra-20-ingress-nginx"
-infra/28-sops-...        → creates Argo CD app "infra-28-sops-secrets-operator"
-... and so on
+infra/10-cert-manager/  → Argo CD app "infra-10-cert-manager"
+infra/20-ingress-nginx/ → Argo CD app "infra-20-ingress-nginx"
+... and so on for each infra/* folder
 ```
 
-`**appset-apps.yaml**` — watches `apps/*`
-
+**`appset-apps.yaml`** — watches `apps/*`
 ```
-apps/hello/  → creates Argo CD app "app-hello"
-```
-
-`**appset-secrets.yaml**` — watches `secrets/*`
-
-```
-secrets/cloudflared/  → creates Argo CD app "secret-cloudflared"
+apps/hello/ → Argo CD app "app-hello"
 ```
 
-This means: **to add a new application, you just create a new folder**. Argo CD
-discovers it automatically within a few minutes. No manual Argo CD configuration
-needed.
+**`appset-secrets.yaml`** — watches `secrets/*`
+```
+secrets/cloudflared/ → Argo CD app "secret-cloudflared"
+```
 
-The **numbers in `infra/`** (10, 20, 28, 30...) are used to control install order.
-cert-manager must be installed before things that need TLS certificates. The numbers
-become sync-wave annotations, which tell Argo CD "don't start wave 20 until wave 10
-is healthy".
+**To add a new application, you just create a new folder.** Argo CD discovers it
+automatically within a few minutes. No Argo CD configuration needed.
+
+**The numbers in `infra/`** (10, 20, 28, 30...) control install order. cert-manager
+must be installed before things that need TLS certificates. The numbers become
+sync-wave annotations telling Argo CD "don't start wave 20 until wave 10 is healthy".
 
 ---
 
@@ -168,311 +211,248 @@ is healthy".
 
 ### `infra/10-cert-manager` — Automatic TLS Certificates
 
-**Human explanation:** When you visit `https://hello.tweak.codes`, your browser
-requires a TLS certificate to establish a secure connection. Getting a free certificate
-from Let's Encrypt used to be a manual process. cert-manager automates this entirely.
-You just annotate an Ingress (the routing rule) with one line and cert-manager:
+**What it does:** Automatically obtains and renews TLS certificates from Let's Encrypt.
+You annotate an Ingress resource with one line and cert-manager handles everything:
+requesting the certificate, proving domain ownership, receiving the cert, and renewing
+it before it expires.
 
-1. Creates a certificate request with Let's Encrypt
-2. Proves you own the domain by serving a special file at `/.well-known/acme-challenge/`
-3. Receives and stores the certificate
-4. Renews it automatically before it expires
+**Do you need this if you have Cloudflare Tunnel?** Technically no. Cloudflare
+terminates TLS at its edge using its own certificate — your users get a valid padlock
+without cert-manager. The internal traffic from cloudflared to ingress-nginx is plain
+HTTP inside your cluster.
 
-**Technical:** cert-manager is a Kubernetes controller that manages `Certificate`,
-`CertificateRequest`, and `ClusterIssuer` custom resources. The `ClusterIssuer`
-defines how to obtain certs — we use ACME HTTP-01 challenges via Let's Encrypt.
-There are two issuers:
+cert-manager adds a second layer: it also encrypts the ingress-nginx → app leg using
+a Let's Encrypt certificate. This is "defence in depth" — useful if you ever access
+the cluster directly without going through Cloudflare. For a homelab it's optional,
+but it costs nothing to have it.
 
-- `letsencrypt-staging` — for testing (gives untrusted certs, higher rate limits)
-- `letsencrypt-prod` — real trusted certificates
-
-The `clusterissuers.yaml` file sets your email so Let's Encrypt can notify you about
-certificate problems.
+**Technical:** cert-manager manages `Certificate`, `CertificateRequest`, and
+`ClusterIssuer` custom resources. We use ACME HTTP-01 challenges via Let's Encrypt
+production (`letsencrypt-prod`). Your email (`halala30@gmail.com`) is registered with
+Let's Encrypt so they can notify you about problems.
 
 ---
 
-### `infra/20-ingress-nginx` — HTTP Traffic Routing
+### `infra/20-ingress-nginx` — HTTP Traffic Routing Inside the Cluster
 
-**Human explanation:** Your cluster runs many services (hello app, Grafana, etc.).
-They all need to be reachable via HTTP/HTTPS. ingress-nginx acts as a reverse proxy —
-a single entry point that routes traffic to the right service based on the hostname.
+**What it does:** Acts as a reverse proxy — a single entry point inside the cluster
+that routes HTTP traffic to the right service based on the hostname.
 
 ```
-https://hello.tweak.codes   → hello app
-https://grafana.tweak.codes → Grafana
+argocd.tweak.codes  → argocd-server service in argocd namespace
+grafana.tweak.codes → grafana service in monitoring namespace
+hello.tweak.codes   → hello service in hello namespace
 ```
 
-Think of it like a hotel reception desk: one door, the receptionist routes you to the
-right room based on who you are.
+Think of it as a hotel reception desk: one door in, the receptionist routes you to
+the right room based on who you are.
 
-**Technical:** ingress-nginx is a Kubernetes `IngressController`. It watches `Ingress`
-resources across the cluster and configures an nginx process to proxy traffic to the
-correct backend `Service`. It's exposed as a `LoadBalancer` service, which means k3s's
-ServiceLB assigns your node's IP (192.168.0.144) and opens ports 80 and 443 on the
-host.
-
-We had to disable k3s's built-in Traefik (another ingress controller) because two
-ingress controllers can't both hold ports 80 and 443 on the same host.
+**Technical:** ingress-nginx watches `Ingress` resources across all namespaces and
+configures an nginx process accordingly. It is exposed as a `LoadBalancer` service,
+which means k3s's ServiceLB binds your node's IP (`192.168.0.144`) to ports 80 and
+443 on the host.
 
 ---
 
 ### `infra/28-sops-secrets-operator` — Encrypted Secrets in Git
 
-**Human explanation:** You need passwords and API credentials in the cluster (tunnel
-credentials, Grafana admin password, etc.). You can't commit them to Git in plaintext
-— anyone with repo access would see them. The sops-secrets-operator solves this: you
-encrypt credentials before committing them, and this operator decrypts them inside the
-cluster.
+**What it does:** Watches for `SopsSecret` resources in the cluster, decrypts them
+using your age private key, and creates regular Kubernetes `Secret` objects that apps
+can use.
 
-**Technical:** The operator watches for `SopsSecret` custom resources in the cluster.
-When it finds one, it uses the age private key (stored as a Kubernetes Secret named
-`sops-age` in the `sops-system` namespace) to decrypt the encrypted values and create
-regular Kubernetes `Secret` objects that other apps can use.
-
-The age key is the only thing that can never be in Git (it's the decryption key). It
-lives only on your homelab host at `~/.config/sops/age/keys.txt` and as a Kubernetes
-Secret in the cluster.
-
-See the SOPS section below for a full explanation.
+This is what makes it safe to store encrypted credentials in Git. See the SOPS section
+below for the full explanation.
 
 ---
 
 ### `infra/30-cloudflared` — The Cloudflare Tunnel
 
-**Human explanation:** Your homelab is on a home network with a dynamic IP address
-that changes. You can't just open port 80/443 on your router and tell the world "my
-server is at 86.x.x.x" because that IP changes and it's a security risk. Cloudflare
-Tunnel solves this differently.
+**What it does:** Exposes your cluster to the internet without opening any ports on
+your router and without needing a static IP.
 
 Instead of the internet connecting TO your server, your server connects OUT to
-Cloudflare. A process called `cloudflared` runs inside your cluster and maintains a
-persistent outbound connection to Cloudflare's global network. When someone visits
-`hello.tweak.codes`, the traffic goes:
+Cloudflare. The `cloudflared` pod maintains a persistent outbound connection to
+Cloudflare's global network. When someone visits `hello.tweak.codes`:
 
 ```
-User's browser
-    ↓
-Cloudflare edge servers (distributed globally)
-    ↓  [through the outbound tunnel]
-cloudflared pod in your cluster
-    ↓  [internal cluster networking]
-ingress-nginx
-    ↓
-hello app
+Browser → Cloudflare edge → through the outbound tunnel → cloudflared pod
+       → ingress-nginx → hello app
 ```
 
-Your home IP is never exposed. No port forwarding needed. Works even if your ISP
-blocks inbound connections.
+Your home IP is never exposed. No port forwarding. Works even if your ISP blocks
+inbound connections.
 
-**Technical:** The `cloudflared` Deployment runs the Cloudflare tunnel client. It
-reads two things:
+**Important detail about the config:** The cloudflared config (`config.yaml`) uses a
+wildcard rule:
 
-1. `config.yaml` (as a ConfigMap) — which hostnames to route where
-2. `cloudflared-credentials` (as a Secret) — authenticates to Cloudflare
+```yaml
+ingress:
+  - hostname: "*.tweak.codes"
+    service: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
+  - service: http_status:404
+```
 
-The config routes both `hello.tweak.codes` and `grafana.tweak.codes` to
-`ingress-nginx`, which then routes them further based on the Ingress rules.
+This means **any** subdomain of `tweak.codes` is automatically forwarded to
+ingress-nginx. You do NOT need to add new hostnames to this file when adding a new
+app. Just create an `Ingress` resource in your app and it works automatically.
 
-The tunnel was created with `cloudflared tunnel create homelab` and linked to your
-Cloudflare account. DNS entries (`CNAME → tunnel-id.cfargotunnel.com`) were created
-with `cloudflared tunnel route dns`.
+**About the host vs cluster cloudflared:** When we started, there was also a cloudflared
+process running as a systemd service on the host machine (the homelab OS itself, not
+inside Kubernetes). It had been installed manually before this GitOps setup. We
+migrated everything to the cluster pod and disabled the host service (`systemctl
+disable --now cloudflared`). The cluster pod is now the only cloudflared.
+
+**Restarting after config changes:** cloudflared reads its config once at startup and
+never re-reads it. When Argo CD updates the ConfigMap (which backs `config.yaml`), the
+running pod doesn't notice. You must restart the pod to pick up changes:
+
+```bash
+kubectl -n cloudflared rollout restart deployment/cloudflared
+```
+
+This is a known Kubernetes behaviour — most applications don't watch config files for
+changes while running.
 
 ---
 
 ### `infra/40-kube-prometheus-stack` — Metrics and Grafana
 
-**Human explanation:** You need to know if your cluster is healthy, how much memory
-it uses, if any pod is crashing, etc. kube-prometheus-stack installs everything you
-need for monitoring in one go.
-
 **What it installs:**
 
-- **Prometheus** — collects and stores metrics (numbers over time: CPU usage, memory,
-request count, etc.)
-- **Grafana** — the dashboard UI where you visualize metrics as graphs
+- **Prometheus** — collects and stores metrics (numbers over time: CPU, memory,
+  request counts, etc.)
+- **Grafana** — dashboard UI at `https://grafana.tweak.codes`
 - **Alertmanager** — sends alerts when something goes wrong
-- **kube-state-metrics** — exports Kubernetes-level metrics (how many pods are running,
-are they healthy, etc.)
-- **node-exporter** — exports host-level metrics (disk space, network, CPU per core)
+- **kube-state-metrics** — Kubernetes-level metrics (pod counts, health status, etc.)
+- **node-exporter** — host-level metrics (disk space, network, CPU per core)
 
-Grafana is exposed at `https://grafana.tweak.codes` via ingress-nginx + Cloudflare
-Tunnel. It is pre-configured with Prometheus as a data source and includes dashboards
-for node metrics, pod metrics, and everything Kubernetes-related.
-
-**Technical:** The kube-prometheus-stack Helm chart uses the Prometheus Operator
-pattern. Instead of configuring Prometheus with raw YAML, you create `ServiceMonitor`
-and `PrometheusRule` custom resources that the operator translates into Prometheus
-configuration. This is why `includeCRDs: true` is essential — the custom resource
-definitions must exist before any of those resources can be applied.
+**Technical:** Uses the Prometheus Operator pattern. Instead of raw Prometheus config,
+you create `ServiceMonitor` and `PrometheusRule` custom resources. The operator
+translates these into Prometheus configuration. This is why `includeCRDs: true` is
+essential — the CRDs must exist before any of those resources can be created.
 
 ---
 
 ### `infra/45-loki` — Log Storage
 
-**Human explanation:** Metrics tell you numbers. Logs tell you what actually happened.
-When an app crashes, you look at its logs to see the error. Loki is a log storage
-system designed to work alongside Prometheus. You can query logs in Grafana using the
-same interface as metrics.
+**What it does:** Stores logs from all your pods. You query logs in Grafana alongside
+metrics — when an app crashes, you look at its logs to see the error.
 
-**Technical:** Loki runs in `SingleBinary` mode — a single pod that handles writes
-and queries. It stores logs on disk (a 10Gi PersistentVolumeClaim). It uses filesystem
-storage instead of object storage (S3) because this is a homelab and we don't have S3.
-
-The `replication_factor: 1` setting means there's no data redundancy — one pod, one
-copy. Acceptable for a homelab; you'd use 3 for production.
+**Technical:** Runs in `SingleBinary` mode — one pod, filesystem storage on a 10Gi
+PVC. No object storage (S3) needed. `replication_factor: 1` means no redundancy,
+which is fine for a homelab.
 
 ---
 
 ### `infra/46-alloy` — Log and Metric Collector
 
-**Human explanation:** Loki stores logs but something has to ship the logs from your
-pods to Loki. Alloy (formerly Grafana Agent) is that collector. It runs on every node
-(as a DaemonSet), watches every pod's stdout/stderr, and forwards the log lines to
-Loki.
+**What it does:** Ships logs FROM pods TO Loki. Runs as a DaemonSet (one instance on
+every node), watches every pod's stdout/stderr, and forwards to Loki.
 
-**Technical:** Alloy's configuration (in `values.yaml`) uses the River configuration
-language to:
-
-1. Discover all pods via the Kubernetes API (`discovery.kubernetes "pods"`)
-2. Tail logs from those pods (`loki.source.kubernetes "k8s"`)
-3. Push to Loki's API (`loki.write "default"` pointing to
-  `http://loki.observability.svc.cluster.local:3100`)
-
-`svc.cluster.local` is Kubernetes internal DNS — Alloy talks to Loki without leaving
-the cluster.
+**Technical:** Uses the River configuration language. Discovers pods via the Kubernetes
+API, tails their logs, pushes to `http://loki.observability.svc.cluster.local:3100`
+(Kubernetes internal DNS — traffic never leaves the cluster).
 
 ---
 
 ## The Application: `apps/hello`
 
-This is your demo application. It's a plain nginx web server that serves the default
-nginx welcome page. Its purpose is to prove the entire stack works end-to-end.
+A demo nginx container that proves the entire stack works end-to-end. Accessible at
+`https://hello.tweak.codes`.
 
-The `apps/hello/` directory contains:
-
-- `deployment.yaml` — runs one nginx pod
+Files:
+- `deployment.yaml` — one nginx pod
 - `service.yaml` — exposes the pod inside the cluster on port 80
 - `ingress.yaml` — tells ingress-nginx to route `hello.tweak.codes` to the service
 - `networkpolicy.yaml` — only allows traffic from ingress-nginx (security)
 - `namespace.yaml` — creates the `hello` namespace
 
-The Ingress annotation `cert-manager.io/cluster-issuer: letsencrypt-prod` is what
-triggers cert-manager to obtain a TLS certificate automatically.
-
 ---
 
 ## SOPS and Age Keys — Secrets Explained Fully
 
-This is the part that confuses most people. Let's go from first principles.
-
 ### The Problem
 
-You need the Cloudflare tunnel credentials (`credentials.json`) in the cluster so
-`cloudflared` can authenticate. But you also want to keep them in Git so everything
-is reproducible. You can't put raw secrets in Git — anyone with repo access sees them.
+You need the Cloudflare tunnel credentials in the cluster so `cloudflared` can
+authenticate. But you also want everything in Git so the cluster can be rebuilt. You
+cannot put raw secrets in Git.
 
-### The Solution: Encryption
+### The Solution: Asymmetric Encryption
 
-You encrypt the secret before committing it. Only someone with the decryption key can
-read it. The decryption key never goes in Git.
+You generate a **keypair**:
 
-### age — the Encryption Tool
+- **Public key** (`age1p6z3qj...`) — used to encrypt. Safe to share, in `.sops.yaml`.
+- **Private key** (`AGE-SECRET-KEY-...`) — used to decrypt. Never commit this anywhere.
 
-`age` is a modern encryption tool. You generate a **keypair**:
-
-- A **public key** (`age1p6z3qj...`) — used to encrypt. Safe to share, put in Git.
-- A **private key** (`AGE-SECRET-KEY-...`) — used to decrypt. Never share, never
-commit.
-
-Your private key lives at `~/.config/sops/age/keys.txt` on the homelab host. Your
-public key is in `.sops.yaml` in this repo.
+Your private key lives at `~/.config/sops/age/keys.txt` on the homelab host.
 
 ### SOPS — Encrypts YAML Files
 
-SOPS (Secrets OPerationS) is a tool that encrypts YAML files using age keys. When you
-run `sops --encrypt file.yaml`, it:
-
-1. Reads the YAML
-2. Encrypts every value (leaves keys readable)
-3. Writes an encrypted file
-
-The result looks like:
+SOPS (Secrets OPerationS) encrypts YAML files using your age key. It encrypts the
+values but leaves the keys readable:
 
 ```yaml
-# Encrypted file — safe to commit
+# After encryption — safe to commit
 apiVersion: isindir.github.com/v1alpha3
 kind: SopsSecret
 metadata:
-    name: cloudflared-credentials  # readable
+    name: cloudflared-credentials    # readable
 spec:
     secretTemplates:
-        - name: cloudflared-credentials
-          stringData:
-              credentials.json: ENC[AES256_GCM,data:xxxxxencryptedxxxxx,...]
+        - stringData:
+              credentials.json: ENC[AES256_GCM,data:xxxencryptedxxx,...]
 sops:
     age:
         - recipient: age1p6z3qj...   # your public key
-          enc: |
-              -----BEGIN AGE ENCRYPTED FILE-----
-              ...
 ```
 
-The values are encrypted but the structure is readable. You can see what kind of
-secret it is, what namespace it goes in, just not the actual content.
+### Where is `SOPS_AGE_KEY_FILE`?
 
-### `SOPS_AGE_KEY_FILE` — the Environment Variable
+This is an environment variable that tells SOPS where the private key file is. It does
+NOT live on your host machine's shell environment. It lives **inside the
+sops-secrets-operator pod** only.
 
-When you run `sops --decrypt file.yaml`, SOPS needs to find your private key. The
-`SOPS_AGE_KEY_FILE` environment variable tells it where the private key file is:
+The chain:
+
+```
+Your private key file: ~/.config/sops/age/keys.txt   (homelab host filesystem)
+         │
+         │  you ran: kubectl create secret generic sops-age --from-file=...
+         ▼
+Kubernetes Secret "sops-age" in sops-system namespace  (stored in cluster's etcd)
+         │
+         │  the operator mounts this Secret as a file inside the pod
+         ▼
+/etc/sops-age/age.agekey   (inside the sops-secrets-operator container only)
+         │
+         │  env var SOPS_AGE_KEY_FILE=/etc/sops-age/age.agekey set in the pod
+         ▼
+operator uses it to decrypt SopsSecret resources and create plain k8s Secrets
+```
+
+To verify it's working inside the pod:
 
 ```bash
-export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt
-```
-
-The sops-secrets-operator uses the same mechanism inside the cluster. Look at
-`infra/28-sops-secrets-operator/values.yaml`:
-
-```yaml
-extraEnv:
-  - name: SOPS_AGE_KEY_FILE
-    value: /etc/sops-age/age.agekey   # path inside the pod
-secretsAsFiles:
-  - name: sops-age
-    mountPath: /etc/sops-age
-    secretName: sops-age              # k8s Secret that holds the private key
-```
-
-The operator pod has the private key mounted as a file, so it can decrypt any
-`SopsSecret` resource it finds in the cluster.
-
-### `.sops.yaml` — Encryption Config
-
-The `.sops.yaml` file in the repo root tells SOPS: "when encrypting any file matching
-`*.enc.yaml`, use this public key as the recipient":
-
-```yaml
-creation_rules:
-  - path_regex: \.enc\.ya?ml$
-    age: >-
-      age1p6z3qj3swz7g6c5qtwtyuzvm7nvxxjlvmuk8mnk00zc83yazpp7q4r0fpj
+kubectl -n sops-system exec -it \
+  $(kubectl -n sops-system get pod -l app.kubernetes.io/name=sops-secrets-operator -o name) \
+  -- env | grep SOPS
 ```
 
 ### The Full Secrets Flow
 
 ```
-1. You create a plain YAML SopsSecret file on the homelab host
-2. You run: sops --encrypt file.yaml > file.enc.yaml
-   (SOPS uses the public key from .sops.yaml to encrypt)
-3. You commit and push file.enc.yaml to Git
-4. Argo CD detects the new file in secrets/cloudflared/
+1. Create a plain SopsSecret YAML file on the homelab host (never commit this)
+2. Encrypt it: sops --encrypt file.yaml > secrets/my-app/file.enc.yaml
+3. Commit and push the encrypted file
+4. Argo CD detects the new secrets/my-app/ folder
 5. Argo CD applies the SopsSecret resource to the cluster
 6. sops-secrets-operator sees the SopsSecret
 7. It uses the private key (from the sops-age k8s Secret) to decrypt
 8. It creates a regular k8s Secret with the decrypted values
-9. cloudflared mounts that Secret and authenticates with Cloudflare
+9. Your app mounts that Secret and uses the credentials
 ```
 
-The private key (`AGE-SECRET-KEY-...`) is the only thing that is NOT in Git.
+The private key is the only thing not in Git.
 
 ---
 
@@ -481,39 +461,37 @@ The private key (`AGE-SECRET-KEY-...`) is the only thing that is NOT in Git.
 When someone visits `https://hello.tweak.codes`:
 
 ```
-1. Browser contacts Cloudflare DNS → gets Cloudflare IP (not your home IP)
-2. Browser connects to Cloudflare edge server over HTTPS
-   (Cloudflare terminates TLS using their certificate)
-3. Cloudflare looks up the tunnel for tweak.codes
-4. Cloudflare sends the request through the tunnel to your cluster
-5. cloudflared pod receives the request
-6. cloudflared looks at config.yaml: "hello.tweak.codes → ingress-nginx"
-7. cloudflared forwards to: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
-8. ingress-nginx receives the request, checks its Ingress rules
-9. ingress-nginx finds: "hello.tweak.codes → service hello in namespace hello, port 80"
-10. ingress-nginx proxies to the hello Service
-11. The Service routes to the hello Pod (nginx container)
-12. Response travels back the same path
+1. Browser contacts Cloudflare DNS
+   → gets a Cloudflare IP (your home IP is never revealed)
+
+2. Browser connects to Cloudflare edge over HTTPS
+   → Cloudflare terminates TLS using their own certificate
+   → your users see a valid padlock here
+
+3. Cloudflare sends the request through the persistent tunnel
+
+4. cloudflared pod in your cluster receives it (plain HTTP now)
+
+5. cloudflared matches "*.tweak.codes" → forwards to ingress-nginx
+   URL: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
+
+6. ingress-nginx checks its Ingress rules
+   → finds: "hello.tweak.codes → service hello in namespace hello"
+
+7. ingress-nginx proxies to the hello Service → hello Pod
+
+8. Response travels back the same path
 ```
-
-Note: there are TWO TLS layers:
-
-- Cloudflare to your browser: Cloudflare's own certificate
-- ingress-nginx also has a Let's Encrypt certificate (from cert-manager) but it's
-not used for external traffic when behind Cloudflare Tunnel — Cloudflare handles
-the public-facing TLS
 
 ---
 
 ## How to Add a New Application
 
-### Simple App (just a container)
+### Simple app with plain YAML
 
-1. Create a directory `apps/my-app/`
-2. Create these files:
+1. Create `apps/my-app/` with these files:
 
-`**apps/my-app/kustomization.yaml**`
-
+**`kustomization.yaml`**
 ```yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -525,8 +503,7 @@ resources:
   - ingress.yaml
 ```
 
-`**apps/my-app/namespace.yaml**`
-
+**`namespace.yaml`**
 ```yaml
 apiVersion: v1
 kind: Namespace
@@ -534,8 +511,7 @@ metadata:
   name: my-app
 ```
 
-`**apps/my-app/deployment.yaml**`
-
+**`deployment.yaml`**
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -559,8 +535,7 @@ spec:
             - containerPort: 3000
 ```
 
-`**apps/my-app/service.yaml**`
-
+**`service.yaml`**
 ```yaml
 apiVersion: v1
 kind: Service
@@ -575,8 +550,7 @@ spec:
       targetPort: 3000
 ```
 
-`**apps/my-app/ingress.yaml**`
-
+**`ingress.yaml`**
 ```yaml
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -604,42 +578,30 @@ spec:
                   number: 80
 ```
 
-1. Add the hostname to `infra/30-cloudflared/config.yaml`:
-
-```yaml
-ingress:
-  - hostname: hello.tweak.codes
-    service: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
-  - hostname: grafana.tweak.codes
-    service: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
-  - hostname: my-app.tweak.codes       # ← add this
-    service: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
-  - service: http_status:404
-```
-
-1. Add DNS in Cloudflare:
+2. Commit and push:
 
 ```bash
-cloudflared tunnel route dns homelab my-app.tweak.codes
-```
-
-1. Commit and push everything:
-
-```bash
-git add apps/my-app/ infra/30-cloudflared/config.yaml
+git add apps/my-app/
 git commit -m "feat: add my-app"
 git push origin main
 ```
 
-Argo CD detects the new `apps/my-app/` directory within 3 minutes and deploys it.
+That's it. Because cloudflared uses a wildcard (`*.tweak.codes → ingress-nginx`), the
+subdomain is automatically routed. No changes to cloudflared config. No DNS changes.
+Just the Ingress is enough.
 
-### App Using a Helm Chart
+Argo CD picks up the new folder within a few minutes and deploys everything.
 
-If your app has a community Helm chart, use `infra/` instead of `apps/` and use the
-Kustomize `helmCharts` approach. Look at `infra/20-ingress-nginx/kustomization.yaml`
-as a template. Create `infra/NN-my-app/kustomization.yaml` with:
+---
 
+### App using an external Helm chart
+
+Use `infra/` instead of `apps/`. Create `infra/NN-my-app/`:
+
+**`kustomization.yaml`**
 ```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
 helmCharts:
   - name: my-chart
     repo: https://charts.example.com
@@ -647,16 +609,19 @@ helmCharts:
     releaseName: my-app
     namespace: my-app
     valuesFile: values.yaml
-    includeCRDs: true   # add if the chart has CRDs
+    includeCRDs: true   # always add this — costs nothing if the chart has no CRDs
 ```
 
-### App That Needs a Secret
+**`values.yaml`** — your chart configuration.
 
-If your app needs a password or API key:
+---
 
-1. Create a plain `SopsSecret` YAML file (locally, never commit this):
+### App that needs a secret
+
+1. On the homelab host, create a plain YAML file (never commit this version):
 
 ```yaml
+# /tmp/my-app-secret.yaml  — plain, do not commit
 apiVersion: isindir.github.com/v1alpha3
 kind: SopsSecret
 metadata:
@@ -666,19 +631,19 @@ spec:
   secretTemplates:
     - name: my-app-secret
       stringData:
-        API_KEY: "my-actual-api-key-here"
+        API_KEY: "my-actual-api-key"
 ```
 
-1. Encrypt it on the homelab host:
+2. Encrypt it:
 
 ```bash
 SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt \
 sops --encrypt \
   --age age1p6z3qj3swz7g6c5qtwtyuzvm7nvxxjlvmuk8mnk00zc83yazpp7q4r0fpj \
-  my-app-secret.yaml > secrets/my-app/my-app-secret.enc.yaml
+  /tmp/my-app-secret.yaml > secrets/my-app/my-app-secret.enc.yaml
 ```
 
-1. Create `secrets/my-app/kustomization.yaml`:
+3. Create `secrets/my-app/kustomization.yaml`:
 
 ```yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
@@ -687,7 +652,7 @@ resources:
   - my-app-secret.enc.yaml
 ```
 
-1. Reference the secret in your Deployment:
+4. Reference the secret in your Deployment:
 
 ```yaml
 env:
@@ -698,8 +663,7 @@ env:
         key: API_KEY
 ```
 
-1. Commit and push `secrets/my-app/`. Argo CD creates a `secret-my-app` application.
-  The sops-secrets-operator decrypts it and creates the Kubernetes Secret.
+5. Commit and push. The sops-secrets-operator decrypts it and creates the k8s Secret.
 
 ---
 
@@ -712,119 +676,138 @@ kubectl -n argocd get applications --sort-by=.metadata.name \
   -o custom-columns='NAME:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status'
 ```
 
-### Force a sync immediately (instead of waiting 3 minutes)
+### Force a sync immediately
 
 ```bash
 kubectl -n argocd patch application app-hello \
   --type merge -p '{"operation":{"initiatedBy":{"username":"admin"},"sync":{"prune":true}}}'
 ```
 
-### See logs for a pod
-
-```bash
-kubectl -n hello get pods                    # find the pod name
-kubectl -n hello logs hello-xxxxx-yyyyy      # see its logs
-```
-
-### See why a pod is crashing
-
-```bash
-kubectl -n hello describe pod hello-xxxxx-yyyyy
-```
-
-### Restart an app
-
-```bash
-kubectl -n hello rollout restart deployment/hello
-```
-
-### Check that a certificate was issued
-
-```bash
-kubectl get certificates -A
-# READY=True means the cert is valid
-```
-
-### Force Argo CD to re-read from Git immediately
+### Force Argo CD to re-read from Git
 
 ```bash
 kubectl -n argocd annotate application app-hello \
   argocd.argoproj.io/refresh=hard --overwrite
 ```
 
----
-
-## The Bootstrap Sequence (What You'd Do on a Fresh Cluster)
-
-If you ever need to rebuild from scratch:
+### Restart an app (picks up ConfigMap changes too)
 
 ```bash
-# 1. Install k3s (disable servicelb and traefik in one go)
-# Then edit /etc/systemd/system/k3s.service to add:
-# '--disable' 'traefik'
-# Restart: sudo systemctl restart k3s
+kubectl -n hello rollout restart deployment/hello
+```
 
-# 2. Install Argo CD (manually, one time)
+### See pod logs
+
+```bash
+kubectl -n hello get pods                    # find the pod name
+kubectl -n hello logs hello-xxxxx-yyyyy
+```
+
+### See why a pod is not starting
+
+```bash
+kubectl -n hello describe pod hello-xxxxx-yyyyy
+```
+
+### Check certificates
+
+```bash
+kubectl get certificates -A
+# READY=True means the cert is valid and trusted
+```
+
+---
+
+## The Bootstrap Sequence (What to Do on a Fresh Cluster)
+
+```bash
+# 1. Install k3s
+curl -sfL https://get.k3s.io | sh -
+
+# 2. Disable Traefik (it conflicts with ingress-nginx on ports 80/443)
+sudo nano /etc/systemd/system/k3s.service
+# Add under ExecStart:  '--disable' \ 'traefik' \
+sudo systemctl daemon-reload && sudo systemctl restart k3s
+
+# 3. Increase inotify limits
+sudo sysctl fs.inotify.max_user_instances=8192
+sudo sysctl fs.inotify.max_user_watches=524288
+echo "fs.inotify.max_user_instances=8192
+fs.inotify.max_user_watches=524288" | sudo tee /etc/sysctl.d/99-inotify.conf
+
+# 4. Install Argo CD (one time)
 kubectl create namespace argocd
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
-
-# 3. Tell Argo CD to manage itself from Git
 kubectl apply -f bootstrap/argocd/install.yaml
 
-# 4. Tell Argo CD to manage the ApplicationSets from Git
+# 5. Tell Argo CD to manage itself and the cluster from Git
 kubectl apply -f bootstrap/argocd/root-app.yaml
 
-# 5. Create the SOPS age key Secret (the one thing not in Git)
+# 6. Create the age key Secret (the one thing not in Git)
 kubectl -n sops-system create secret generic sops-age \
   --from-file=age.agekey=$HOME/.config/sops/age/keys.txt
 
-# 6. Create the Cloudflare tunnel credentials Secret
+# 7. Create the Cloudflare tunnel credentials Secret
 kubectl -n cloudflared create secret generic cloudflared-credentials \
-  --from-file=credentials.json=$HOME/.cloudflared/<tunnel-id>.json
-# (This will eventually be replaced by the SOPS-encrypted secret in Git)
+  --from-file=credentials.json=$HOME/.cloudflared/63b08bb5-8d1b-4232-aea3-1bf198fe581b.json
 
-# 7. Wait. Argo CD discovers all apps from Git and deploys everything automatically.
+# 8. Wait — Argo CD discovers everything from Git and deploys automatically
+kubectl -n argocd get applications --watch
 ```
+
+Steps 6 and 7 are the only things not in Git. Everything else rebuilds automatically.
 
 ---
 
 ## Common Questions
 
 **Why are the infra folders numbered?**
-The numbers (10, 20, 28...) control the order in which Argo CD syncs them. cert-manager
-(10) must be running before ingress-nginx (20) validates Ingress resources, which must
-be running before cloudflared (30) can route traffic. The numbers become sync waves.
+The numbers (10, 20, 28...) control install order. cert-manager must be running before
+ingress-nginx validates Ingress resources, which must be running before cloudflared
+routes traffic. The numbers become Argo CD sync-wave annotations.
 
 **What is `includeCRDs: true`?**
-Some Helm charts (like kube-prometheus-stack and sops-secrets-operator) ship new
-Kubernetes resource types (called Custom Resource Definitions or CRDs). These must
-be installed before any resources of those types can be created. `includeCRDs: true`
-tells Kustomize to ask Helm to include the CRD definitions in its rendered output.
-Without it, Argo CD tries to create `PrometheusRule` resources before Kubernetes even
-knows what a `PrometheusRule` is, and fails.
+Some Helm charts (like kube-prometheus-stack and sops-secrets-operator) install new
+Kubernetes resource types (Custom Resource Definitions). These must exist before any
+resources of those types can be created. Without `includeCRDs: true`, Argo CD tries
+to create `PrometheusRule` resources before Kubernetes even knows what a
+`PrometheusRule` is, and fails with "CRD not found".
 
 **What is `ServerSideApply=true`?**
-A safer way for Argo CD to apply changes to the cluster. Instead of the client
-computing the diff, the Kubernetes server does it. This reduces conflicts when
-Kubernetes has added its own default values to resources.
+A safer apply mode where the Kubernetes server computes the diff instead of the client.
+Reduces false conflicts when Kubernetes has added its own default values to resources.
 
 **What is `CreateNamespace=true`?**
-Argo CD will create the namespace if it doesn't exist before deploying resources into
-it. Without this, if the namespace doesn't exist, the sync fails.
+Argo CD will create the namespace before deploying resources into it. Without this, if
+the namespace doesn't exist yet, the sync fails.
 
 **Why does infra-45-loki sometimes show OutOfSync?**
 Kubernetes adds a `volumeMode: Filesystem` field to the Loki StatefulSet's storage
-spec after creation. This field isn't in the Helm chart template. We added an
-`ignoreDifferences` rule to tell Argo CD to ignore this specific field. It's cosmetic
-and doesn't affect how Loki works.
+spec after creation. This field is not in the Helm template. We added an
+`ignoreDifferences` rule to Argo CD to ignore this specific field. It is cosmetic and
+does not affect how Loki works.
 
-**What happens if I delete an Argo CD application?**
-Because the AppSet has `finalizers: resources-finalizer.argocd.argoproj.io`, deleting
-an Application also deletes all the Kubernetes resources it manages (pods, services,
-namespaces, etc.). This is intentional — it keeps the cluster clean. The root app
-(`homelab-staging-root`) does NOT have a finalizer, so deleting it won't cascade-delete
-all the AppSets.
+**I changed cloudflared's `config.yaml` but it didn't take effect. Why?**
+The cloudflared process reads its config once at startup. Argo CD updating the
+ConfigMap changes the file on disk but the running process has the old config in
+memory. You must restart the pod: `kubectl -n cloudflared rollout restart deployment/cloudflared`.
 
-**Why is the Grafana admin password `changeme-grafana-admin` in plain YAML?**
-It's a known TODO. The correct fix is to encrypt it with SOPS and reference it as a
-secret. For now it works but it's not good practice.
+**Do I need to update `infra/30-cloudflared/config.yaml` when adding a new subdomain?**
+No. The cloudflared config uses a wildcard `*.tweak.codes → ingress-nginx`. Any
+subdomain automatically reaches nginx. Just add an `Ingress` resource in your app.
+
+**Why `server.insecure: true` for Argo CD?**
+With Cloudflare Tunnel, TLS is terminated at Cloudflare's edge. Traffic from
+cloudflared to ingress-nginx to Argo CD is plain HTTP inside the cluster. By default,
+Argo CD redirects any HTTP request to HTTPS, creating an infinite redirect loop.
+`server.insecure: true` tells Argo CD "trust that whoever is in front of me handled
+TLS" and serve the page directly.
+
+**What happens if I delete an Argo CD Application?**
+The `infra/` and `apps/` ApplicationSets have `finalizers: resources-finalizer`, so
+deleting an Application cascades and also deletes all the Kubernetes resources it
+manages. The `homelab-staging-root` Application does NOT have a finalizer — deleting
+it only removes the Application object, not the ApplicationSets it manages.
+
+**Why is the Grafana admin password in plain YAML?**
+It is a known TODO. The correct fix is to encrypt it with SOPS as a SopsSecret and
+reference it. For now it works but anyone with repo access can see it.
