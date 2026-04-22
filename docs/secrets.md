@@ -62,7 +62,7 @@ sops -d secrets/cloudflared/cloudflared-credentials.enc.yaml
 
 ## In-cluster: sops-secrets-operator
 
-After `infra/28-sops-secrets-operator` is healthy, use **`SopsSecret`** CRs (see [upstream docs](https://github.com/isindir/sops-secrets-operator)) so the controller materializes Kubernetes `Secret` objects from encrypted Git data.
+After `infra/28-sops-secrets-operator` is healthy, use `**SopsSecret**` CRs (see [upstream docs](https://github.com/isindir/sops-secrets-operator)) so the controller materializes Kubernetes `Secret` objects from encrypted Git data.
 
 Those manifests are reconciled by the `clusters/homelab-staging/appset-secrets.yaml` ApplicationSet, so anything under `secrets/<app>/` becomes part of the normal GitOps flow.
 

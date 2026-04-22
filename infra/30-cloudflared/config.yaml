@@ -8,4 +8,6 @@ ingress:
     service: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
   - hostname: grafana.tweak.codes
     service: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
+  - hostname: argocd.tweak.codes
+    service: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
   - service: http_status:404

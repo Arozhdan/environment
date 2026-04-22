@@ -8,12 +8,12 @@ global:
 configs:
   params:
     # Set true only if TLS terminates before Argo CD (e.g. reverse proxy only).
-    server.insecure: false
+    server.insecure: true
   cm:
     # Required for Kustomize with helmCharts: in each infra/*/ overlay.
     kustomize.buildOptions: "--load-restrictor LoadRestrictionsNone --enable-helm"
     # Optional: public URL if you expose the UI (Tailscale DNS, internal LB, etc.)
-    url: https://argocd.example.invalid
+    url: https://argocd.tweak.codes
   rbac:
     policy.csv: |
       # GitHub-style teams — replace with your IdP groups when you add SSO.
@@ -30,7 +30,7 @@ configs:
 
 notifications:
   enabled: true
-  argocdUrl: https://argocd.example.invalid
+  argocdUrl: https://argocd.tweak.codes
   # Add Slack / email / webhook entries per:
   # https://argo-cd.readthedocs.io/en/stable/operator-manual/notifications/services/overview/
   notifiers: {}
@@ -77,7 +77,9 @@ server:
       cpu: 250m
       memory: 256Mi
   ingress:
-    enabled: false
+    enabled: true
+    ingressClassName: nginx
+    hostname: argocd.tweak.codes
 
 repoServer:
   replicas: 1
