@@ -3,5 +3,6 @@
 # Then: age-keygen -y age.key  → paste below
 creation_rules:
   - path_regex: \.enc\.ya?ml$
+    encrypted_regex: "^(data|stringData)$"
     age: >-
       age1p6z3qj3swz7g6c5qtwtyuzvm7nvxxjlvmuk8mnk00zc83yazpp7q4r0fpj
