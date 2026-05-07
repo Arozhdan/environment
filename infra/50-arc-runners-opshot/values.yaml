@@ -27,7 +27,7 @@ runnerScaleSetName: "opshot-runners"
 # Scale bounds. minRunners=0 means idle has zero compute cost; the controller
 # spawns a pod per queued job and reaps it after the job finishes.
 minRunners: 0
-maxRunners: 3
+maxRunners: 5
 
 # Default `containerMode` (none) runs each job inside a single ephemeral
 # runner pod with no inner container runtime. Sufficient for jobs that don't
@@ -53,6 +53,11 @@ template:
           requests:
             cpu: 200m
             memory: 512Mi
+          # Limits sized to fit five concurrent runners on a homelab with
+          # ~4-5 GiB RAM headroom. 5 × 2 GiB cap = 10 GiB worst case, but
+          # CI jobs (bun install, tsc, vitest) rarely exceed ~1 GiB each;
+          # the cap is a safety net, not the steady-state size. CPU cap
+          # left generous because the host stays under 10% utilization.
           limits:
             cpu: 2000m
-            memory: 4Gi
+            memory: 2Gi
