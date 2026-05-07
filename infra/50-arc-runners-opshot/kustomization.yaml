@@ -1,0 +1,20 @@
+# Runner scale set for github.com/Arozhdan/opshot.
+# Sync wave is derived from the directory prefix (50). The controller at
+# wave 35 must be healthy first; the SopsSecret at wave 30 must have
+# materialised the `arc-opshot-pat` Secret in this namespace.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: arc-runners
+
+resources:
+  - namespace.yaml
+
+helmCharts:
+  - name: gha-runner-scale-set
+    repo: oci://ghcr.io/actions/actions-runner-controller-charts
+    version: 0.9.3
+    releaseName: opshot-runners
+    namespace: arc-runners
+    valuesFile: values.yaml
+    includeCRDs: true

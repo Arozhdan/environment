@@ -1,0 +1,18 @@
+# actions-runner-controller v2 — pin chart version in kustomization.yaml.
+# Defaults are sane for a small homelab cluster; override only what we need.
+
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# The controller watches AutoscalingRunnerSet CRs and provisions ephemeral
+# runner pods on demand. It does NOT need access to GitHub directly — the
+# scale set in `infra/50-arc-runners-opshot` carries the PAT.
+flags:
+  watchSingleNamespace: ""

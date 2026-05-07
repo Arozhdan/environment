@@ -1,0 +1,24 @@
+# actions-runner-controller v2 (gha-runner-scale-set-controller).
+#
+# Chart is published as an OCI artifact only. Kustomize's helmCharts inflator
+# supports `oci://` repo URLs when the underlying helm CLI is v3.8+. Argo CD's
+# bundled helm honours that. If a future Argo CD upgrade ever loses OCI
+# support, the fallback is to switch this to a direct Argo CD Application
+# manifest with `spec.source.repoURL: ghcr.io/actions/actions-runner-controller-charts`
+# (Argo's native Helm source supports OCI without going through Kustomize).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: arc-systems
+
+resources:
+  - namespace.yaml
+
+helmCharts:
+  - name: gha-runner-scale-set-controller
+    repo: oci://ghcr.io/actions/actions-runner-controller-charts
+    version: 0.9.3
+    releaseName: arc-controller
+    namespace: arc-systems
+    valuesFile: values.yaml
+    includeCRDs: true

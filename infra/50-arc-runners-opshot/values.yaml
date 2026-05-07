@@ -1,0 +1,46 @@
+# Runner scale set bound to github.com/Arozhdan/opshot.
+# Each GitHub Actions job that requests `runs-on: opshot-runners` triggers
+# the controller to spin up an ephemeral pod. Idle = zero pods.
+
+githubConfigUrl: "https://github.com/Arozhdan/opshot"
+
+# Name of an existing K8s Secret in this namespace with key `github_token`.
+# Materialised by the SopsSecret in `secrets/arc-runners-opshot/`.
+# (ARC also supports a GitHub App; PAT is the simpler path for a personal repo.)
+githubConfigSecret: "arc-opshot-pat"
+
+# Display name in GitHub's runners list and the `runs-on:` label in workflows.
+runnerScaleSetName: "opshot-runners"
+
+# Scale bounds. minRunners=0 means idle has zero compute cost; the controller
+# spawns a pod per queued job and reaps it after the job finishes.
+minRunners: 0
+maxRunners: 3
+
+# Default `containerMode` (none) runs each job inside a single ephemeral
+# runner pod with no inner container runtime. Sufficient for jobs that don't
+# use `services:` blocks or `container:` directives. If you ever need
+# Docker-in-Docker, switch to `containerMode.type: dind`.
+containerMode:
+  type: ""
+
+# The runner image is GitHub's stock `ghcr.io/actions/actions-runner:latest`.
+# Bun + node-gyp toolchain are installed in-workflow via oven-sh/setup-bun@v2
+# and apt-get in CI steps — keeps cold-start small. If cold-start becomes
+# painful, bake a custom image with Bun + build-essential pre-installed and
+# point `template.spec.containers[0].image` at it here.
+template:
+  spec:
+    containers:
+      - name: runner
+        image: ghcr.io/actions/actions-runner:latest
+        # Toolchain @opshot/electron's rebuild-native script needs.
+        # Installed at job start via apt-get in the workflow when first used.
+        command: ["/home/runner/run.sh"]
+        resources:
+          requests:
+            cpu: 200m
+            memory: 512Mi
+          limits:
+            cpu: 2000m
+            memory: 4Gi
