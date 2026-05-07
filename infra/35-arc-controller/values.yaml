@@ -16,3 +16,12 @@ resources:
 # scale set in `infra/50-arc-runners-opshot` carries the PAT.
 flags:
   watchSingleNamespace: ""
+
+# Pin the ServiceAccount name so the scale set chart in
+# `infra/50-arc-runners-opshot` can reference it explicitly. Without this
+# the SA name is derived from the release name + chart suffix — long and
+# fragile across helm/chart versions. The scale set's
+# `controllerServiceAccount.name` must match.
+serviceAccount:
+  create: true
+  name: gha-rs-controller

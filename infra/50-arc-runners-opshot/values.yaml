@@ -9,6 +9,18 @@ githubConfigUrl: "https://github.com/Arozhdan/opshot"
 # (ARC also supports a GitHub App; PAT is the simpler path for a personal repo.)
 githubConfigSecret: "arc-opshot-pat"
 
+# Skip the chart's in-cluster discovery of the controller's ServiceAccount.
+# The discovery uses the kube API at `helm template` time, which Argo CD's
+# offline manifest generation cannot do — render fails with
+# "No gha-rs-controller deployment found using label …". Setting the name
+# and namespace explicitly bypasses the lookup.
+#
+# Must match the `serviceAccount.name` value in
+# `infra/35-arc-controller/values.yaml`.
+controllerServiceAccount:
+  name: gha-rs-controller
+  namespace: arc-systems
+
 # Display name in GitHub's runners list and the `runs-on:` label in workflows.
 runnerScaleSetName: "opshot-runners"
 
