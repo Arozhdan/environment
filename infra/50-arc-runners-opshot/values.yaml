@@ -53,11 +53,12 @@ template:
           requests:
             cpu: 200m
             memory: 512Mi
-          # Limits sized to fit five concurrent runners on a homelab with
-          # ~4-5 GiB RAM headroom. 5 × 2 GiB cap = 10 GiB worst case, but
-          # CI jobs (bun install, tsc, vitest) rarely exceed ~1 GiB each;
-          # the cap is a safety net, not the steady-state size. CPU cap
-          # left generous because the host stays under 10% utilization.
+          # Memory cap sized for real CI jobs in this monorepo. Live
+          # measurement showed at least one tsc+vitest pod sit at 2046 /
+          # 2048 MiB — one allocation away from OOMKilled. 3 GiB gives
+          # ~1 GiB headroom over observed peak. Realistic mean stays
+          # ~1.3 GiB per runner, so 5 × 3 GiB worst-case is theoretical.
+          # CPU cap left generous because the host stays under 35%.
           limits:
             cpu: 2000m
-            memory: 2Gi
+            memory: 3Gi
