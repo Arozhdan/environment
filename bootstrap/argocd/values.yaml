@@ -14,6 +14,24 @@ configs:
     kustomize.buildOptions: "--load-restrictor LoadRestrictionsNone --enable-helm"
     # Optional: public URL if you expose the UI (Tailscale DNS, internal LB, etc.)
     url: https://argocd.tweak.codes
+    # Stop tracking dynamically-created resources that controllers manage as
+    # children of the resources we DO declare. Without this Argo claims them
+    # via the inherited `argocd.argoproj.io/instance` label, marks them as
+    # extraneous (because the rendered chart manifests don't include them),
+    # and tries to prune them — the controller re-creates them — Argo
+    # detects drift again. Thrash.
+    #
+    # Current entries are ARC v2 (gha-runner-scale-set) runtime CRs. Add
+    # more here as you adopt other operators with the same pattern.
+    resource.exclusions: |
+      - apiGroups:
+          - actions.github.com
+        kinds:
+          - AutoscalingListener
+          - EphemeralRunner
+          - EphemeralRunnerSet
+        clusters:
+          - "*"
   rbac:
     policy.csv: |
       # GitHub-style teams — replace with your IdP groups when you add SSO.
