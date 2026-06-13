@@ -1,8 +1,13 @@
-# Runner scale set bound to github.com/Arozhdan/opshot.
+# Runner scale set bound to github.com/Arozhdan/opside.
+# Re-routed from the now-dead `opshot` repo (2026-06-13) so opside's CI runs on
+# the homelab cluster instead of GitHub-hosted minutes. The `arc-opshot-pat`
+# secret is a classic `repo`-scoped PAT, which covers all of the owner's private
+# repos, so no token change was needed. The `opshot-runners` label name is kept
+# (legacy) — opside workflows request `runs-on: opshot-runners`.
 # Each GitHub Actions job that requests `runs-on: opshot-runners` triggers
 # the controller to spin up an ephemeral pod. Idle = zero pods.
 
-githubConfigUrl: "https://github.com/Arozhdan/opshot"
+githubConfigUrl: "https://github.com/Arozhdan/opside"
 
 # Name of an existing K8s Secret in this namespace with key `github_token`.
 # Materialised by the SopsSecret in `secrets/arc-runners-opshot/`.
