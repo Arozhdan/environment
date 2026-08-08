@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cliproxyapi
+  namespace: cliproxyapi
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - cliproxyapi.tweak.codes
+      secretName: cliproxyapi-tls
+  rules:
+    - host: cliproxyapi.tweak.codes
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: cliproxyapi
+                port:
+                  number: 8317

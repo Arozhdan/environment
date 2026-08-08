@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cliproxyapi
+  namespace: cliproxyapi
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: cliproxyapi
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+  egress:
+    - {}

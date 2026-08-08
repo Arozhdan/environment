@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cliproxyapi
+  namespace: cliproxyapi
+  labels:
+    app.kubernetes.io/name: cliproxyapi
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: cliproxyapi
+  ports:
+    - name: http
+      port: 8317
+      targetPort: http
