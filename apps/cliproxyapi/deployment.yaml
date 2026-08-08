@@ -21,6 +21,15 @@ spec:
         runAsNonRoot: false
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+        - name: init-config
+          image: busybox
+          command: ['sh', '-c', 'cp /secret-config/config.yaml /writable-config/config.yaml']
+          volumeMounts:
+            - name: secret-config
+              mountPath: /secret-config
+            - name: writable-config
+              mountPath: /writable-config
       containers:
         - name: cliproxyapi
           image: eceasy/cli-proxy-api:latest
@@ -31,7 +40,7 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /root/.cli-proxy-api
-            - name: config
+            - name: writable-config
               mountPath: /CLIProxyAPI/config.yaml
               subPath: config.yaml
           resources:
@@ -49,6 +58,8 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: cliproxyapi-data
-        - name: config
+        - name: secret-config
           secret:
             secretName: cliproxyapi-config
+        - name: writable-config
+          emptyDir: {}
