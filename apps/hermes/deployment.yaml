@@ -29,6 +29,13 @@ spec:
           env:
             - name: DASHSCOPE_BASE_URL
               value: "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1"
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - sh
+                  - -c
+                  - "ln -sf /opt/data/.local/bin/gh /usr/local/bin/gh || true"
           volumeMounts:
             - name: data
               mountPath: /opt/data
