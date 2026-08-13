@@ -28,7 +28,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: folio
-          image: ghcr.io/arozhdan/folio@sha256:e5959f375d7729c1c94477c83d1de2ac8591ff62c7c68752438e8eefb69803d4
+          image: ghcr.io/arozhdan/folio@sha256:50869e2de9db16a79c2c6f040f3acceb63ce2f867cd08f1de7029b2d6e31a792
           ports:
             - name: http
               containerPort: 8787
