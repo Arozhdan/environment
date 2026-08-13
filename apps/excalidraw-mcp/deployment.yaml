@@ -16,6 +16,8 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: excalidraw-mcp
+      annotations:
+        tweak.codes/runtime-secret-revision: "2"
     spec:
       securityContext:
         runAsNonRoot: true
