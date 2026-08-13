@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: folio
+  namespace: folio
+  labels:
+    app.kubernetes.io/name: folio
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: folio
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: folio
+    spec:
+      imagePullSecrets:
+        - name: folio-ghcr
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: folio
+          image: ghcr.io/arozhdan/folio@sha256:35cd30fee545bd049aa442eb6847f0f431382ec51667a191d746af897d0c6627
+          ports:
+            - name: http
+              containerPort: 8787
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: DATA_DIR
+              value: /data
+            - name: ALLOWED_EMAIL
+              value: arozhdan.dev@gmail.com
+            - name: ALLOWED_GITHUB_OWNERS
+              value: Arozhdan
+            - name: CF_ACCESS_TEAM_DOMAIN
+              value: arozhdan.cloudflareaccess.com
+          envFrom:
+            - secretRef:
+                name: folio-runtime
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 768Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: folio-data
+        - name: tmp
+          emptyDir: {}
