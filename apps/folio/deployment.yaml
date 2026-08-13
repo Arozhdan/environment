@@ -40,7 +40,7 @@ spec:
             - name: ALLOWED_EMAIL
               value: arozhdan.dev@gmail.com
             - name: ALLOWED_GITHUB_OWNERS
-              value: Arozhdan
+              value: Arozhdan,opside-cloud
             - name: CF_ACCESS_TEAM_DOMAIN
               value: arozhdan.cloudflareaccess.com
           envFrom:
