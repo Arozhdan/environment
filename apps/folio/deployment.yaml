@@ -28,7 +28,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: folio
-          image: ghcr.io/arozhdan/folio@sha256:50869e2de9db16a79c2c6f040f3acceb63ce2f867cd08f1de7029b2d6e31a792
+          image: ghcr.io/arozhdan/folio@sha256:a311feeddc1899ee2c3e83b2bb11fc47794083fa20250075f340b5cdf59f1569
           ports:
             - name: http
               containerPort: 8787
@@ -39,8 +39,14 @@ spec:
               value: /data
             - name: ALLOWED_EMAIL
               value: arozhdan.dev@gmail.com
-            - name: ALLOWED_GITHUB_OWNERS
-              value: Arozhdan,opside-cloud
+            - name: FOLIO_CONTENT_OWNER
+              value: Arozhdan
+            - name: FOLIO_CONTENT_REPO
+              value: folio
+            - name: FOLIO_CONTENT_BRANCH
+              value: main
+            - name: FOLIO_CONTENT_PREFIX
+              value: folios/
             - name: CF_ACCESS_TEAM_DOMAIN
               value: arozhdan.cloudflareaccess.com
           envFrom:
