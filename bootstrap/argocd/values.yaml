@@ -13,7 +13,7 @@ configs:
     # Required for Kustomize with helmCharts: in each infra/*/ overlay.
     kustomize.buildOptions: "--load-restrictor LoadRestrictionsNone --enable-helm"
     # Optional: public URL if you expose the UI (Tailscale DNS, internal LB, etc.)
-    url: https://argocd.tweak.codes
+    url: https://argocd.stagy.dev
     # Stop tracking dynamically-created resources that controllers manage as
     # children of the resources we DO declare. Without this Argo claims them
     # via the inherited `argocd.argoproj.io/instance` label, marks them as
@@ -48,7 +48,7 @@ configs:
 
 notifications:
   enabled: true
-  argocdUrl: https://argocd.tweak.codes
+  argocdUrl: https://argocd.stagy.dev
   # Add Slack / email / webhook entries per:
   # https://argo-cd.readthedocs.io/en/stable/operator-manual/notifications/services/overview/
   notifiers: {}
@@ -97,7 +97,7 @@ server:
   ingress:
     enabled: true
     ingressClassName: nginx
-    hostname: argocd.tweak.codes
+    hostname: argocd.stagy.dev
 
 repoServer:
   replicas: 1

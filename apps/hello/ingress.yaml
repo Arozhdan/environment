@@ -10,10 +10,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - hello.tweak.codes
+        - hello.stagy.dev
       secretName: hello-tls
   rules:
-    - host: hello.tweak.codes
+    - host: hello.stagy.dev
       http:
         paths:
           - path: /

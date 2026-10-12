@@ -9,7 +9,7 @@ grafana:
   adminPassword: changeme-grafana-admin  # TODO: replace and encrypt with SOPS
   grafana.ini:
     server:
-      root_url: https://grafana.tweak.codes
+      root_url: https://grafana.stagy.dev
   ingress:
     enabled: true
     ingressClassName: nginx
@@ -17,11 +17,11 @@ grafana:
       cert-manager.io/cluster-issuer: letsencrypt-prod
       nginx.ingress.kubernetes.io/ssl-redirect: "false"
     hosts:
-      - grafana.tweak.codes
+      - grafana.stagy.dev
     tls:
       - secretName: grafana-tls
         hosts:
-          - grafana.tweak.codes
+          - grafana.stagy.dev
   additionalDataSources:
     - name: Loki
       type: loki

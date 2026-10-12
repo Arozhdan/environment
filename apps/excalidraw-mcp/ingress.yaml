@@ -11,10 +11,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - excalidraw-mcp.tweak.codes
+        - excalidraw-mcp.stagy.dev
       secretName: excalidraw-mcp-tls
   rules:
-    - host: excalidraw-mcp.tweak.codes
+    - host: excalidraw-mcp.stagy.dev
       http:
         paths:
           - path: /

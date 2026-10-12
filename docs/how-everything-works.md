@@ -60,7 +60,7 @@ cluster, Argo reverts it.
 - History lives in git log
 - Recovery from total cluster loss is mostly automatic
 
-The Argo CD UI is at **[https://argocd.tweak.codes](https://argocd.tweak.codes)**. Username is `admin`. The
+The Argo CD UI is at **[https://argocd.stagy.dev](https://argocd.stagy.dev)**. Username is `admin`. The
 password is retrieved with:
 
 ```bash
@@ -242,9 +242,9 @@ Let's Encrypt so they can notify you about problems.
 that routes HTTP traffic to the right service based on the hostname.
 
 ```
-argocd.tweak.codes  → argocd-server service in argocd namespace
-grafana.tweak.codes → grafana service in monitoring namespace
-hello.tweak.codes   → hello service in hello namespace
+argocd.stagy.dev  → argocd-server service in argocd namespace
+grafana.stagy.dev → grafana service in monitoring namespace
+hello.stagy.dev   → hello service in hello namespace
 ```
 
 Think of it as a hotel reception desk: one door in, the receptionist routes you to
@@ -275,7 +275,7 @@ your router and without needing a static IP.
 
 Instead of the internet connecting TO your server, your server connects OUT to
 Cloudflare. The `cloudflared` pod maintains a persistent outbound connection to
-Cloudflare's global network. When someone visits `hello.tweak.codes`:
+Cloudflare's global network. When someone visits `hello.stagy.dev`:
 
 ```
 Browser → Cloudflare edge → through the outbound tunnel → cloudflared pod
@@ -290,12 +290,12 @@ wildcard rule:
 
 ```yaml
 ingress:
-  - hostname: "*.tweak.codes"
+  - hostname: "*.stagy.dev"
     service: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
   - service: http_status:404
 ```
 
-This means **any** subdomain of `tweak.codes` is automatically forwarded to
+This means **any** subdomain of `stagy.dev` is automatically forwarded to
 ingress-nginx. You do NOT need to add new hostnames to this file when adding a new
 app. Just create an `Ingress` resource in your app and it works automatically.
 
@@ -323,7 +323,7 @@ changes while running.
 
 - **Prometheus** — collects and stores metrics (numbers over time: CPU, memory,
 request counts, etc.)
-- **Grafana** — dashboard UI at `https://grafana.tweak.codes`
+- **Grafana** — dashboard UI at `https://grafana.stagy.dev`
 - **Alertmanager** — sends alerts when something goes wrong
 - **kube-state-metrics** — Kubernetes-level metrics (pod counts, health status, etc.)
 - **node-exporter** — host-level metrics (disk space, network, CPU per core)
@@ -360,13 +360,13 @@ API, tails their logs, pushes to `http://loki.observability.svc.cluster.local:31
 ## The Application: `apps/hello`
 
 A demo nginx container that proves the entire stack works end-to-end. Accessible at
-`https://hello.tweak.codes`.
+`https://hello.stagy.dev`.
 
 Files:
 
 - `deployment.yaml` — one nginx pod
 - `service.yaml` — exposes the pod inside the cluster on port 80
-- `ingress.yaml` — tells ingress-nginx to route `hello.tweak.codes` to the service
+- `ingress.yaml` — tells ingress-nginx to route `hello.stagy.dev` to the service
 - `networkpolicy.yaml` — only allows traffic from ingress-nginx (security)
 - `namespace.yaml` — creates the `hello` namespace
 
@@ -461,7 +461,7 @@ The private key is the only thing not in Git.
 
 ## How Traffic Actually Flows
 
-When someone visits `https://hello.tweak.codes`:
+When someone visits `https://hello.stagy.dev`:
 
 ```
 1. Browser contacts Cloudflare DNS
@@ -475,11 +475,11 @@ When someone visits `https://hello.tweak.codes`:
 
 4. cloudflared pod in your cluster receives it (plain HTTP now)
 
-5. cloudflared matches "*.tweak.codes" → forwards to ingress-nginx
+5. cloudflared matches "*.stagy.dev" → forwards to ingress-nginx
    URL: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
 
 6. ingress-nginx checks its Ingress rules
-   → finds: "hello.tweak.codes → service hello in namespace hello"
+   → finds: "hello.stagy.dev → service hello in namespace hello"
 
 7. ingress-nginx proxies to the hello Service → hello Pod
 
@@ -571,10 +571,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - my-app.tweak.codes
+        - my-app.stagy.dev
       secretName: my-app-tls
   rules:
-    - host: my-app.tweak.codes
+    - host: my-app.stagy.dev
       http:
         paths:
           - path: /
@@ -594,7 +594,7 @@ git commit -m "feat: add my-app"
 git push origin main
 ```
 
-That's it. Because cloudflared uses a wildcard (`*.tweak.codes → ingress-nginx`), the
+That's it. Because cloudflared uses a wildcard (`*.stagy.dev → ingress-nginx`), the
 subdomain is automatically routed. No changes to cloudflared config. No DNS changes.
 Just the Ingress is enough.
 
@@ -801,7 +801,7 @@ ConfigMap changes the file on disk but the running process has the old config in
 memory. You must restart the pod: `kubectl -n cloudflared rollout restart deployment/cloudflared`.
 
 **Do I need to update `infra/30-cloudflared/config.yaml` when adding a new subdomain?**
-No. The cloudflared config uses a wildcard `*.tweak.codes → ingress-nginx`. Any
+No. The cloudflared config uses a wildcard `*.stagy.dev → ingress-nginx`. Any
 subdomain automatically reaches nginx. Just add an `Ingress` resource in your app.
 
 **Why `server.insecure: true` for Argo CD?**

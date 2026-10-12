@@ -11,10 +11,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - cliproxyapi.tweak.codes
+        - cliproxyapi.stagy.dev
       secretName: cliproxyapi-tls
   rules:
-    - host: cliproxyapi.tweak.codes
+    - host: cliproxyapi.stagy.dev
       http:
         paths:
           - path: /

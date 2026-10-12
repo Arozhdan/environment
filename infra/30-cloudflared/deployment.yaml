@@ -14,6 +14,10 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: cloudflared
+      annotations:
+        # The ConfigMap has no hash suffix, so bump this whenever config.yaml
+        # changes to make the pod restart and pick up the new ingress rules.
+        cloudflared/config-revision: "stagy.dev-1"
     spec:
       securityContext:
         runAsNonRoot: true

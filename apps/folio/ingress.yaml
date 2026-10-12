@@ -11,10 +11,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - folio.tweak.codes
+        - folio.stagy.dev
       secretName: folio-tls
   rules:
-    - host: folio.tweak.codes
+    - host: folio.stagy.dev
       http:
         paths:
           - path: /
