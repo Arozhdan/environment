@@ -16,6 +16,10 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: folio
+      annotations:
+        # Env comes from the folio-runtime Secret, which does not restart the
+        # pod when it changes. Bump this whenever that Secret changes.
+        folio/runtime-revision: "stagy.dev-access-aud"
     spec:
       imagePullSecrets:
         - name: folio-ghcr
