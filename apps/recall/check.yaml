@@ -1,0 +1,86 @@
+# What the startup and liveness probes run. It fails, so the pod is restarted, when:
+# - a covered folder shows anything (a cover can come off while the pod runs: when the folder
+#   is deleted or replaced on the host, the kernel drops the mount on it; at the restart the
+#   cover comes back, or the pod does not start at all when the folder is gone),
+# - ~/.claude shows more than projects,
+# - a folder that must be read-only can be written,
+# - the background program does not answer on its socket.
+# `hidden` must list exactly the mounts of the volume "hidden" in deployment.yaml
+# (scan-home.sh checks that).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: recall-check
+  namespace: recall
+  labels:
+    app.kubernetes.io/name: recall
+data:
+  hidden: |
+    /home/develop/.alchemy
+    /home/develop/.ansible
+    /home/develop/.antigravity-server
+    /home/develop/.app-store
+    /home/develop/.bun
+    /home/develop/.cache
+    /home/develop/.claude-mem
+    /home/develop/.cloudflared
+    /home/develop/.codeium
+    /home/develop/.codex
+    /home/develop/.config
+    /home/develop/.convex
+    /home/develop/.copilot
+    /home/develop/.cursor
+    /home/develop/.cursor-server
+    /home/develop/.docker
+    /home/develop/.expo
+    /home/develop/.gemini
+    /home/develop/.hyperframes
+    /home/develop/.infisical
+    /home/develop/.kilocode
+    /home/develop/.kube
+    /home/develop/.local
+    /home/develop/.mcp-auth
+    /home/develop/.opencode
+    /home/develop/.pki
+    /home/develop/.pm2
+    /home/develop/.postplan
+    /home/develop/.ssh
+    /home/develop/.supermaven
+    /home/develop/.t3
+    /home/develop/.terraform.d
+    /home/develop/.tma
+    /home/develop/.vnc
+    /home/develop/.vscode-server
+    /home/develop/.warp
+    /home/develop/.zai
+    /home/develop/.zed_server
+    /home/develop/actions-runner-opside
+    /home/develop/actions-runner-opside2
+    /home/develop/snap
+  check.sh: |
+    while read -r folder; do
+      [ -n "$folder" ] || continue
+      if [ ! -d "$folder" ] || [ -n "$(ls -A "$folder")" ]; then
+        echo "not covered: $folder"
+        exit 1
+      fi
+    done < /etc/recall/hidden
+    if [ "$(ls -A /home/develop/.claude)" != projects ]; then
+      echo "~/.claude shows more than projects"
+      exit 1
+    fi
+    for folder in /home/develop /home/develop/.claude/projects /home/develop/.recall/claude-hook; do
+      if [ -w "$folder" ]; then
+        echo "writable: $folder"
+        exit 1
+      fi
+    done
+    exec node -e '
+      const socket = require("node:net").connect(process.argv[1]);
+      let answer = "";
+      socket.setTimeout(8000, () => process.exit(1));
+      socket.on("error", () => process.exit(1));
+      socket.on("connect", () => socket.end("pid\n"));
+      socket.on("data", (chunk) => (answer += chunk));
+      socket.on("close", () => process.exit(/^[0-9]+$/.test(answer.trim()) ? 0 : 1));
+    ' /home/develop/.recall/recall-daemon.sock

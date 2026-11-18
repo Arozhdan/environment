@@ -1,0 +1,144 @@
+# Fixed volumes that point at host folders, so the pod itself has no hostPath and the namespace
+# keeps the restricted profile. Each is claimed by name and by nobody else. `type: Directory`:
+# the pod does not start when the folder is missing. Retain: deleting a volume never touches
+# the folder. No storage is provisioned; the size is only a required field.
+# The owner's whole home folder; the pod mounts it read-only and covers the secret folders.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: recall-home
+  labels:
+    app.kubernetes.io/name: recall
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes: [ReadOnlyMany]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  claimRef:
+    namespace: recall
+    name: recall-home
+  hostPath:
+    path: /home/develop
+    type: Directory
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: recall-home
+  namespace: recall
+  labels:
+    app.kubernetes.io/name: recall
+spec:
+  accessModes: [ReadOnlyMany]
+  storageClassName: ""
+  volumeName: recall-home
+  resources:
+    requests:
+      storage: 1Gi
+---
+# Claude Code's session files, mounted back read-only inside the covered ~/.claude.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: recall-claude-sessions
+  labels:
+    app.kubernetes.io/name: recall
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes: [ReadOnlyMany]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  claimRef:
+    namespace: recall
+    name: recall-claude-sessions
+  hostPath:
+    path: /home/develop/.claude/projects
+    type: Directory
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: recall-claude-sessions
+  namespace: recall
+  labels:
+    app.kubernetes.io/name: recall
+spec:
+  accessModes: [ReadOnlyMany]
+  storageClassName: ""
+  volumeName: recall-claude-sessions
+  resources:
+    requests:
+      storage: 1Gi
+---
+# The data folder, the one place the pod writes.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: recall-data
+  labels:
+    app.kubernetes.io/name: recall
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  claimRef:
+    namespace: recall
+    name: recall-data
+  hostPath:
+    path: /home/develop/.recall
+    type: Directory
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: recall-data
+  namespace: recall
+  labels:
+    app.kubernetes.io/name: recall
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: ""
+  volumeName: recall-data
+  resources:
+    requests:
+      storage: 1Gi
+---
+# The Claude Code hook that `recall install claude` copies beside the settings file. Claude Code
+# on the host runs it on every prompt, so the pod must not be able to change it.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: recall-claude-hook
+  labels:
+    app.kubernetes.io/name: recall
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes: [ReadOnlyMany]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  claimRef:
+    namespace: recall
+    name: recall-claude-hook
+  hostPath:
+    path: /home/develop/.recall/claude-hook
+    type: Directory
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: recall-claude-hook
+  namespace: recall
+  labels:
+    app.kubernetes.io/name: recall
+spec:
+  accessModes: [ReadOnlyMany]
+  storageClassName: ""
+  volumeName: recall-claude-hook
+  resources:
+    requests:
+      storage: 1Gi

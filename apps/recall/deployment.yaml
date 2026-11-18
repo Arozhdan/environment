@@ -1,0 +1,291 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: recall
+  namespace: recall
+  labels:
+    app.kubernetes.io/name: recall
+spec:
+  # One program on one data folder, never two: the old pod is gone before the new one starts.
+  # No `replicas` on purpose: it starts at 1, and since Argo CD does not own the field,
+  # `kubectl -n recall scale deployment recall --replicas=0` stops it and it stays stopped.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: recall
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: recall
+      annotations:
+        # The two values come from the recall-env Secret, which does not restart the pod when it
+        # changes. Bump this whenever that Secret changes.
+        recall/env-revision: "1"
+    spec:
+      imagePullSecrets:
+        - name: recall-ghcr
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 60
+      # The owner's own user: the look tools refuse a repository that belongs to another user.
+      # No fsGroup: the kubelet would change the group of the files in the data folder.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # The cover over ~/.claude must already hold an empty "projects" folder: the sessions
+        # are mounted there, and nothing can make that folder once the cover is read-only.
+        - name: claude-cover
+          image: ghcr.io/arozhdan/recall@sha256:7026b1abb7a97c594c82f1795fd7dbdd8fae0001fb55fa0dca9ae89dd1d171ee
+          command: ["mkdir", "-p", "/cover/projects"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: claude-cover
+              mountPath: /cover
+      containers:
+        - name: recall
+          image: ghcr.io/arozhdan/recall@sha256:7026b1abb7a97c594c82f1795fd7dbdd8fae0001fb55fa0dca9ae89dd1d171ee
+          env:
+            # The host's time zone (Etc/UTC on the host when this was written): the nightly
+            # backup runs at backup.at in this zone.
+            - name: TZ
+              value: Etc/UTC
+            # The same home as on the host, so ~ in the settings file means the same folder
+            # for the pod and for the recall step on the host.
+            - name: HOME
+              value: /home/develop
+            - name: RECALL_SETTINGS
+              value: /home/develop/.recall/settings.yaml
+            # The image points this at /pi-sessions; Pi's own place is under the home.
+            - name: PI_CODING_AGENT_SESSION_DIR
+              value: /home/develop/.pi/agent/sessions
+            - name: RECALL_MODEL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: recall-env
+                  key: RECALL_MODEL_API_KEY
+            - name: RECALL_GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: recall-env
+                  key: RECALL_GITHUB_TOKEN
+          # No HTTP port: the probes check the covers and ask the program for its pid on its
+          # socket (check.yaml).
+          startupProbe:
+            exec:
+              command: ["sh", "/etc/recall/check.sh"]
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 30
+          livenessProbe:
+            exec:
+              command: ["sh", "/etc/recall/check.sh"]
+            periodSeconds: 20
+            timeoutSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            # git runs under its own 512 MB limit for each look; this is the whole pod's.
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            # The whole home folder, read-only, at the same path as on the host.
+            - name: home
+              mountPath: /home/develop
+              readOnly: true
+            # The data folder, the one place it writes.
+            - name: data
+              mountPath: /home/develop/.recall
+            # The hook Claude Code runs on the host stays out of the pod's reach.
+            - name: claude-hook
+              mountPath: /home/develop/.recall/claude-hook
+              readOnly: true
+            # Claude Code's folder is covered (its sign-in is there); only the sessions come back.
+            - name: claude-cover
+              mountPath: /home/develop/.claude
+              readOnly: true
+            - name: claude-sessions
+              mountPath: /home/develop/.claude/projects
+              readOnly: true
+            - name: check
+              mountPath: /etc/recall
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            # Folders that hold sign-ins, keys or tokens, each covered by the same empty
+            # read-only folder. A covered folder missing on the host stops the pod from starting
+            # (the mount point cannot be made inside the read-only home). Keep check.yaml in step.
+            - name: hidden
+              mountPath: /home/develop/.alchemy
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.ansible
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.antigravity-server
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.app-store
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.bun
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.cache
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.claude-mem
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.cloudflared
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.codeium
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.codex
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.config
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.convex
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.copilot
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.cursor
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.cursor-server
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.docker
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.expo
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.gemini
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.hyperframes
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.infisical
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.kilocode
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.kube
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.local
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.mcp-auth
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.opencode
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.pki
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.pm2
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.postplan
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.ssh
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.supermaven
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.t3
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.terraform.d
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.tma
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.vnc
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.vscode-server
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.warp
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.zai
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/.zed_server
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/actions-runner-opside
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/actions-runner-opside2
+              readOnly: true
+            - name: hidden
+              mountPath: /home/develop/snap
+              readOnly: true
+      volumes:
+        - name: home
+          persistentVolumeClaim:
+            claimName: recall-home
+            readOnly: true
+        - name: data
+          persistentVolumeClaim:
+            claimName: recall-data
+        - name: claude-hook
+          persistentVolumeClaim:
+            claimName: recall-claude-hook
+            readOnly: true
+        - name: claude-sessions
+          persistentVolumeClaim:
+            claimName: recall-claude-sessions
+            readOnly: true
+        - name: claude-cover
+          emptyDir:
+            sizeLimit: 1Mi
+        - name: hidden
+          emptyDir:
+            sizeLimit: 1Mi
+        - name: check
+          configMap:
+            name: recall-check
+        - name: tmp
+          emptyDir:
+            sizeLimit: 512Mi
