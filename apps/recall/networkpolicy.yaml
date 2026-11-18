@@ -1,0 +1,41 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: recall-default-deny
+  namespace: recall
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+# Only DNS and outbound HTTPS to public addresses: the model API and GitHub.
+# No ingress at all: the owner talks to the program through its socket in ~/.recall.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: recall-allow-egress
+  namespace: recall
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: recall
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
